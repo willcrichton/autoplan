@@ -38,10 +38,10 @@ class Exponential(Rule):
         uses_method = self.global_sample('uses_method', Categorical({True: 5, False: 10}))
         var = self.params['var']
         if uses_method:
-            self.add_label(PythagoreanLabels.UsesMathPow)
+            self.set_label(PythagoreanLabels.UsesMathPow)
             return f'Math.pow({var}, 2)'
         else:
-            self.add_label(PythagoreanLabels.UsesInlineCalculation)
+            self.set_label(PythagoreanLabels.UsesInlineCalculation)
             return f'{var} * {var}'
 
 

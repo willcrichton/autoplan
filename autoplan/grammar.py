@@ -15,8 +15,8 @@ class Rule:
             generator.set_global(name, pyro.sample(name, dist))
         return generator.get_global(name)
 
-    def add_label(self, key):
-        get_generator().add_label(key)
+    def set_label(self, label):
+        get_generator().set_label(label)
 
     def render(self):
         raise NotImplementedError

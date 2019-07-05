@@ -18,13 +18,14 @@ class Generator:
     def set_global(self, key, value):
         self.global_state[key] = value
 
-    def add_label(self, key):
-        self.labels.add(key)
+    def set_label(self, label):
+        self.label = label
 
     def generate(self):
         global GLOBAL_GENERATOR
         GLOBAL_GENERATOR = self
-        self.global_state = {}
-        self.labels = set()
 
-        return self.grammar.render(), self.labels
+        self.global_state = {}
+        self.label = None
+
+        return self.grammar.render(), self.label
