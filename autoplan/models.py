@@ -7,6 +7,7 @@ class RNN(nn.Module):
     def __init__(self, dataset, device):
         super().__init__()
 
+        # Setup various constants
         self.device = device
         self.vocab_size = dataset.vocab_size
         self.num_labels = len(dataset.label_set)
@@ -14,26 +15,35 @@ class RNN(nn.Module):
         self.hidden_size = 256
         self.num_layers = 1
 
+        # Define graph architecture
         self.embedding = nn.Embedding(self.vocab_size, self.embedding_size)
         self.rnn = nn.RNN(input_size=self.embedding_size,
                           hidden_size=self.hidden_size,
                           num_layers=self.num_layers,
                           batch_first=True)
-        self.fc = nn.Linear(self.hidden_size, self.num_labels)
-        self.sigmoid = nn.Sigmoid()
+        self.classifier = nn.Linear(self.hidden_size, self.num_labels)
+
+        # Put graph onto appropriate device
         self.to(device=device)
 
     def forward(self, input_sequence, seq_lengths):
         batch_size = input_sequence.size(0)
 
+        # Convert token indices into an embedding
         input_embedding = self.embedding(input_sequence)
+
+        # Pack embedding into batched sequences
         packed_input = rnn_utils.pack_padded_sequence(input_embedding,
                                                       seq_lengths.data.tolist(),
                                                       batch_first=True,
                                                       enforce_sorted=False)
 
+        # Initialize the hidden layer with random values
         h0 = torch.empty(self.num_layers, batch_size, self.hidden_size).to(device=self.device)
         nn.init.xavier_normal_(h0)
 
+        # Run the RNN on all sequences
         _, hidden = self.rnn(packed_input, h0)
-        return self.fc(hidden).squeeze(0)
+
+        # Run the classifier on the hidden state to predict the final class
+        return self.classifier(hidden).squeeze(0)

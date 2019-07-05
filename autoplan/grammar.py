@@ -18,9 +18,6 @@ class Rule:
     def set_label(self, label):
         get_generator().set_label(label)
 
-    def render(self):
-        raise NotImplementedError
-
     def format(self, template, **templateVars):
         startTemp = '<START_BRACKET>'
         endTemp = '<END_BRACKET>'
@@ -32,3 +29,6 @@ class Rule:
         result = result.replace(startTemp, '{{')
         result = result.replace(endTemp, '}}')
         return result
+
+    def render(self):
+        raise NotImplementedError
