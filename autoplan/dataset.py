@@ -17,34 +17,12 @@ class Dataset:
     class_balance: List[float]
 
 
-def token_to_key(token):
-    typ = type(token)
-    value = token.value
-
-    if typ == tokenizer.String:
-        return typ
-    else:
-        return (typ, value)
-
-
-def build_dataset(N_train, N_val, grammar, label_set):
+def build_dataset(N_train, N_val, tokenizer, grammar, label_set):
     generator = Generator(grammar=grammar)
     programs, labels = unzip([generator.generate() for _ in range(N_train + N_val)])
 
-    token_keys = [[token_to_key(token) for token in tokenizer.tokenize(program)]
-                  for program in programs]
-
-    token_to_index = {}
-    for l in token_keys:
-        for k in l:
-            if not k in token_to_index:
-                token_to_index[k] = len(token_to_index)
-
+    tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs)
     vocab_size = len(token_to_index)
-
-    token_indices = [
-        torch.tensor([token_to_index[k] for k in tk], dtype=torch.long) for tk in token_keys
-    ]
 
     label_list = list(label_set)
     program_labels = [torch.tensor(int(prog_label), dtype=torch.long) for prog_label in labels]
