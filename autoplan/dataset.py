@@ -16,7 +16,7 @@ class Dataset:
     class_balance: List[float]
 
 
-def build_dataset(N_train, N_val, tokenizer, grammar, label_set):
+def build_synthetic_dataset(N_train, N_val, tokenizer, grammar, label_set):
     generator = Generator(grammar=grammar)
     programs, labels = unzip([generator.generate() for _ in range(N_train + N_val)])
 
