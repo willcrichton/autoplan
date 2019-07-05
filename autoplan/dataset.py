@@ -1,6 +1,5 @@
 from .labels import Labels
 from .generator import Generator
-from javalang import tokenizer
 import torch
 from torch.utils.data import Dataset as TorchDataset
 from iterextras import unzip
