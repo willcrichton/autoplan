@@ -5,7 +5,7 @@ from copy import copy
 from .models import GrammarInference
 import torch.nn.functional as F
 from enum import IntEnum
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict, Counter
 
 GLOBAL_GENERATOR = None
 
@@ -15,27 +15,47 @@ def get_generator():
 
 
 class Generator:
-    def __init__(self, grammar):
+    def __init__(self, grammar, adaptive):
         self.grammar = grammar
+        self.production_choices = {}
+        self.choices_counter = defaultdict(int) # Initializes the choices over a production cycle, not a program
+        self.adaptive = adaptive
+
+    def apply_penalties(self, values, weights):
+        counter = 1 # To avoid division by 0
+        for index in range(len(values)):
+            counter += self.choices_counter[values[index]] 
+            weights[index] = weights[index] * 1 / counter
+        return weights
 
     def choice(self, name, options):
         if name not in self.choices:
             assert options is not None
             values, weights = unzip(options.items())
+        
+            if self.adaptive:
+                weights = self.apply_penalties(values, weights)
+                
             probs = torch.tensor(weights, dtype=torch.float) / sum(weights)
-            dist = Categorical(probs)
-            index = dist.sample().item()
-            value = values[index]
+            dist = Categorical(probs) # Chooses a sample
+            index = dist.sample().item() # Returns a sample
+            value = values[index] # Returns the actual string
+            
             self.choices[name] = (index, value)
             self.choice_options[name] = list(zip(probs.tolist(), values))
+            self.production_choices.update(self.choice_options)
+            self.choices_counter[value] += 1 # Updates the counter of the choices globally
         return self.choices[name][1]
 
     def generate(self):
         global GLOBAL_GENERATOR
         GLOBAL_GENERATOR = self
 
-        self.choices = OrderedDict()
-        self.choice_options = {}
+        if not self.adaptive:
+            self.choice_options = {} 
+        else:
+            self.choice_options = self.production_choices 
+        self.choices = OrderedDict() # Specific program choices are always reset
 
         return self.grammar.render(), [(k, v[0]) for k, v in self.choices.items()], copy(self.choice_options)
 
