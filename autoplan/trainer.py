@@ -1,9 +1,12 @@
 from torch import nn
 import torch
 import torch.optim as optim
+from .models import NeuralParser
+from .parsing import Parser
 
 
-class Trainer:
+# TODO: this class is out of date since datasets changed
+class ClassifierTrainer:
     def __init__(self, dataset, model, device=None, batch_size=100):
         self.device = device if device is not None else torch.device('cpu')
 
@@ -25,17 +28,6 @@ class Trainer:
         self.val_loader = DataLoader(dataset.val_dataset,
                                      batch_size=batch_size,
                                      collate_fn=self._collate)
-
-    # Compacts a list of sequences length [n1, n2, .. nk] into a tensor [k x max(n)]
-    def _collate(self, batch):
-        collated = default_collate([{k: v
-                                     for k, v in item.items() if k is not 'input_sequence'}
-                                    for item in batch])
-        seqs = [item['input_sequence'] for item in batch]
-        max_len = max([s.size(0) for s in seqs])
-        collated['input_sequence'] = torch.stack(
-            [F.pad(seq, [0, max_len - seq.size(0)]) for seq in seqs])
-        return collated
 
     def train_one_epoch(self):
         total_loss = 0
@@ -69,4 +61,45 @@ class Trainer:
             pred_label = self.predict(batch['input_sequence'], batch['seq_lengths'])
             correct += (pred_label == batch['labels']).sum().item()
             total += pred_label.numel()
+        return correct / total
+
+
+class ParserTrainer:
+    def __init__(self, grammar, dataset, device=None, batch_size=100):
+        self.model = NeuralParser(dataset, device)
+        self.train_loader = dataset.loader(dataset.train_dataset)
+        self.val_loader = dataset.loader(dataset.val_dataset)
+        self.optimizer = optim.Adam(self.model.parameters())
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def train_one_epoch(self):
+        total_loss = 0
+        for batch in self.train_loader:
+            self.optimizer.zero_grad()
+
+            preds = self.model.forward(**batch)
+
+            loss = 0
+            for i in range(len(preds)):
+                for t in range(len(preds[i]) - 1):
+                    loss += self.loss_fn(
+                        preds[i][t].unsqueeze(0).cpu(),
+                        batch['choices'][i][t+1].unsqueeze(0).cpu())
+
+            loss.backward()
+            self.optimizer.step()
+
+            total_loss += loss.item()
+
+        return total_loss
+
+    def eval(self):
+        correct = 0
+        total = 0
+        for batch in self.val_loader:
+            pred_choices = self.model.predict(**batch)
+            for (pred, true) in zip(pred_choices, batch['choices']):
+                correct += (pred == true[1:]).sum().item()
+                total += pred.size(0)
+
         return correct / total
