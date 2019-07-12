@@ -1,6 +1,3 @@
-from torch.utils.data import DataLoader
-from torch.utils.data.dataloader import default_collate
-import torch.nn.functional as F
 from torch import nn
 import torch
 import torch.optim as optim

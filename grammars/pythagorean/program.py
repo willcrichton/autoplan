@@ -10,57 +10,49 @@ class PythagoreanLabels(Labels):
 
 class InputPrompt(Rule):
     def render(self):
-        return self.sample(
-            'input_prompt',
-            Categorical({
-                '': 55,  # empty string to keep simplest prompt unchanged
-                'Enter ': 22,
-                'enter value ': 11,
-                'Enter value for ': 11,
-            }))
+        return self.choice('input_prompt', {
+            '': 55,  # empty string to keep simplest prompt unchanged
+            'Enter ': 22,
+            'enter value ': 11,
+            'Enter value for ': 11,
+        })
 
 
 class OutputPrompt(Rule):
     def render(self):
         var = self.params['var']
-        return self.sample(
-            'output_prompt',
-            Categorical({
-                f'{var}=': 55,
-                f'{var}:': 22,
-                'The answer is': 11,
-                'The hypotenuse is': 11
-            }))
+        return self.choice('output_prompt', {
+            f'{var}=': 55,
+            f'{var}:': 22,
+            'The answer is': 11,
+            'The hypotenuse is': 11
+        })
 
 
 class Exponential(Rule):
     def render(self):
-        uses_method = self.global_sample('uses_method', Categorical({True: 5, False: 10}))
+        uses_method = self.choice('uses_method', {True: 5, False: 10})
         var = self.params['var']
         if uses_method:
-            self.set_label(PythagoreanLabels.UsesMathPow)
             return f'Math.pow({var}, 2)'
         else:
-            self.set_label(PythagoreanLabels.UsesInlineCalculation)
             return f'{var} * {var}'
 
 
 class MainPrompt(Rule):
     def render(self):
-        return self.sample(
-            'main_prompt',
-            Categorical({
-                'Enter values to compute the Pythagorean Theorem.': 70,
-                'This program finds the hypotenuse, C, of a triangle with sides A and B.': 15,
-                'This program runs the Pythagorean Theorem. Choose values a and b.': 15,
-            }))
+        return self.choice('main_prompt', {
+            'Enter values to compute the Pythagorean Theorem.': 70,
+            'This program finds the hypotenuse, C, of a triangle with sides A and B.': 15,
+            'This program runs the Pythagorean Theorem. Choose values a and b.': 15,
+        })
 
 
 class Solution(Rule):
     def render(self):
-        naming_scheme = self.sample('naming_scheme', Categorical({'a': 1, 'x': 1}))
-        num_type = self.sample('num_type', Categorical({'int': 1, 'double': 1}))
-        print_function = self.sample('print_function', Categorical({'println': 1, 'print': 1}))
+        naming_scheme = self.choice('naming_scheme', {'a': 1, 'x': 1})
+        num_type = self.choice('num_type', {'int': 1, 'double': 1})
+        print_function = self.choice('print_function', {'println': 1, 'print': 1})
 
         template = '''
         {print_function}("{main_prompt}");
