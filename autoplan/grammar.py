@@ -26,8 +26,9 @@ class Rule:
 
         result = template.format(**templateVars)
 
-        result = result.replace(startTemp, '{{')
-        result = result.replace(endTemp, '}}')
+        # Output programs
+        result = result.replace(startTemp, '{')
+        result = result.replace(endTemp, '}')
         return result
 
     def render(self):
