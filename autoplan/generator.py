@@ -16,7 +16,7 @@ def set_generator(gen):
     GLOBAL_GENERATOR = gen
 
 class ProgramGenerator:
-    def __init__(self, grammar, adaptive):
+    def __init__(self, grammar, adaptive=False):
         self.grammar = grammar
         self.production_choices = {}
         self.choices_counter = defaultdict(int) # Initializes the choices over a production cycle, not a program

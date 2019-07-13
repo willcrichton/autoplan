@@ -39,8 +39,7 @@ class Dataset:
         return collated
 
 
-def build_synthetic_dataset(N_train, N_val, tokenizer, grammar):
-    generator = ProgramGenerator(grammar=grammar)
+def build_synthetic_dataset(N_train, N_val, tokenizer, generator):
     programs, choices, choice_options = unzip([generator.generate() for _ in range(N_train + N_val)])
 
     tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs)
