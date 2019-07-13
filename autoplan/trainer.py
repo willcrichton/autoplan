@@ -2,7 +2,6 @@ from torch import nn
 import torch
 import torch.optim as optim
 from .models import NeuralParser
-from .parsing import Parser
 
 
 # TODO: this class is out of date since datasets changed

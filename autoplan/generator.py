@@ -2,7 +2,6 @@ from torch.distributions.categorical import Categorical
 import torch
 from iterextras import unzip
 from copy import copy
-from .models import GrammarInference
 import torch.nn.functional as F
 from enum import IntEnum
 from collections import OrderedDict, defaultdict
@@ -26,7 +25,7 @@ class ProgramGenerator:
     def apply_penalties(self, values, weights):
         counter = 1 # To avoid division by 0
         for index in range(len(values)):
-            counter += self.choices_counter[values[index]] 
+            counter += self.choices_counter[values[index]]
             weights[index] = weights[index] * 1 / counter
         return weights
 
@@ -34,15 +33,15 @@ class ProgramGenerator:
         if name not in self.choices:
             assert options is not None
             values, weights = unzip(options.items())
-        
+
             if self.adaptive:
                 weights = self.apply_penalties(values, weights)
-                
+
             probs = torch.tensor(weights, dtype=torch.float) / sum(weights)
             dist = Categorical(probs) # Chooses a sample
             index = dist.sample().item() # Returns a sample
             value = values[index] # Returns the actual string
-            
+
             self.choices[name] = (index, value)
             self.choice_options[name] = list(zip(probs.tolist(), values))
             self.production_choices.update(self.choice_options)
@@ -53,9 +52,9 @@ class ProgramGenerator:
         set_generator(self)
 
         if not self.adaptive:
-            self.choice_options = {} 
+            self.choice_options = {}
         else:
-            self.choice_options = self.production_choices 
+            self.choice_options = self.production_choices
         self.choices = OrderedDict() # Specific program choices are always reset
 
         return (self.grammar.render(),
