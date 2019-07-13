@@ -1,5 +1,5 @@
 from .labels import Labels
-from .generator import Generator
+from .generator import ProgramGenerator
 import torch
 from torch import tensor
 from torch.utils.data import Dataset as TorchDataset, DataLoader
@@ -40,7 +40,7 @@ class Dataset:
 
 
 def build_synthetic_dataset(N_train, N_val, tokenizer, grammar):
-    generator = Generator(grammar=grammar)
+    generator = ProgramGenerator(grammar=grammar)
     programs, choices, choice_options = unzip([generator.generate() for _ in range(N_train + N_val)])
 
     tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs)

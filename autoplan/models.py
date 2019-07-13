@@ -1,6 +1,7 @@
 from torch import nn
 import torch.nn.utils.rnn as rnn_utils
 import torch
+import torch.nn.functional as F
 
 
 class ProgramEncoder(nn.Module):
@@ -42,7 +43,7 @@ class ProgramEncoder(nn.Module):
         # Run the RNN on all sequences
         _, hidden = self.rnn(packed_input, h0)
 
-        return hidden
+        return hidden.squeeze(0)
 
 
 class ProgramClassifier(nn.Module):
@@ -61,7 +62,7 @@ class ProgramClassifier(nn.Module):
         return self.classifier(hidden).squeeze(0)
 
 
-class GrammarInference(nn.Module):
+class NeuralParser(nn.Module):
     def __init__(self, dataset, device):
         super().__init__()
 
@@ -69,13 +70,14 @@ class GrammarInference(nn.Module):
         self.hidden_size = 256
         self.embedding_size = 300
         self.choice_indices = dataset.choice_indices
+        name_order = sorted(dataset.choices.keys(), key=lambda name: self.choice_indices[name])
 
         # Inputs
         self.encoder = ProgramEncoder(dataset, device)
-        self.choice_embedding = nn.ModuleDict({
-            name: nn.Embedding(len(opts), self.embedding_size)
-            for name, opts in dataset.choices.items()
-        })
+        self.choice_embedding = nn.ModuleList([
+            nn.Embedding(len(dataset.choices[name]), self.embedding_size)
+            for name in name_order
+        ])
         self.index_embedding = nn.Embedding(
             num_embeddings=len(dataset.choices),
             embedding_dim=self.embedding_size)
@@ -86,29 +88,36 @@ class GrammarInference(nn.Module):
             hidden_size=self.hidden_size)
 
         # RV prediction
-        self.inference = nn.ModuleDict({
-            name: nn.Linear(self.hidden_size, len(opts))
-            for name, opts in dataset.choices.items()
-        })
+        self.inference = nn.ModuleList([
+            nn.Linear(self.hidden_size, len(dataset.choices[name]))
+            for name in name_order
+        ])
 
         self.to(device=device)
 
     def init_hidden(self, batch_size):
-        h0 = torch.empty(1, batch_size, self.hidden_size).to(device=self.device)
+        h0 = torch.empty(batch_size, self.hidden_size).to(device=self.device)
         nn.init.xavier_normal_(h0)
         return h0
 
     def step(self, prev_choice, cur_choice, program_emb, h, choices):
         index_emb = self.index_embedding(prev_choice)
 
-        choice = choices.gather(dim=1, index=prev_choice.unsqueeze(-1))
-        choice_emb = self.choice_embedding[prev_choice](choice)
+        choice_value = choices.gather(dim=1, index=prev_choice.unsqueeze(-1))
+        choice_emb = torch.cat([
+            self.choice_embedding[prev_choice[i]](choice_value[i])
+            for i in range(len(prev_choice))
+        ], dim=0)
 
-        input_emb = torch.cat((choice_emb, program_emb, index_emb))
+        input_emb = torch.cat((choice_emb, program_emb, index_emb), dim=1)
 
         h = self.rnn(input_emb, h)
+        pred = [
+            self.inference[cur_choice[i]](h[i, :])
+            for i in range(len(cur_choice))
+        ]
 
-        return self.inference[cur_choice](h), h
+        return pred, h
 
     def forward(self, program, program_len, trace, trace_len, choices):
         program = program.to(self.device)
@@ -123,11 +132,23 @@ class GrammarInference(nn.Module):
         program_emb = self.encoder(program, program_len)
         h = self.init_hidden(batch_size)
 
-        preds = []
+        preds = [[] for _ in range(batch_size)]
         for i in range(max_trace_len - 1):
             prev_choice = trace[:, i]
             cur_choice = trace[:, i+1]
             pred, h = self.step(prev_choice, cur_choice, program_emb, h, choices)
-            preds.append(pred)
+            for j in range(batch_size):
+                if i < trace_len[j]:
+                    preds[j].append(pred[j])
 
         return preds
+
+    def predict(self, *args, **kwargs):
+        preds = self.forward(*args, **kwargs)
+        return [
+            torch.tensor([
+                p.topk(1)[1].item()
+                for p in pl
+            ])
+            for pl in preds
+        ]
