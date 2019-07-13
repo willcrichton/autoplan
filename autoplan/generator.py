@@ -9,10 +9,12 @@ from collections import OrderedDict, defaultdict
 
 GLOBAL_GENERATOR = None
 
-
 def get_generator():
     return GLOBAL_GENERATOR
 
+def set_generator(gen):
+    global GLOBAL_GENERATOR
+    GLOBAL_GENERATOR = gen
 
 class ProgramGenerator:
     def __init__(self, grammar, adaptive):
@@ -48,8 +50,7 @@ class ProgramGenerator:
         return self.choices[name][1]
 
     def generate(self):
-        global GLOBAL_GENERATOR
-        GLOBAL_GENERATOR = self
+        set_generator(self)
 
         if not self.adaptive:
             self.choice_options = {} 

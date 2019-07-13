@@ -74,13 +74,13 @@ class NeuralParser(nn.Module):
 
         # Inputs
         self.encoder = ProgramEncoder(dataset, device)
+        self.index_embedding = nn.Embedding(
+            num_embeddings=len(dataset.choices),
+            embedding_dim=self.embedding_size)
         self.choice_embedding = nn.ModuleList([
             nn.Embedding(len(dataset.choices[name]), self.embedding_size)
             for name in name_order
         ])
-        self.index_embedding = nn.Embedding(
-            num_embeddings=len(dataset.choices),
-            embedding_dim=self.embedding_size)
 
         # RNN
         self.rnn = nn.GRUCell(
@@ -152,3 +152,9 @@ class NeuralParser(nn.Module):
             ])
             for pl in preds
         ]
+
+    def save(self, filename):
+        torch.save(self.state_dict(), filename)
+
+    def load(self, filename):
+        self.load_state_dict(torch.load(filename))
