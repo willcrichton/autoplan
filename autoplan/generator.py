@@ -23,9 +23,11 @@ class ProgramGenerator:
         self.adaptive = adaptive
 
     def apply_penalties(self, values, weights):
-        counter = 1 # To avoid division by 0
+        counter = 0 
         for index in range(len(values)):
             counter += self.choices_counter[values[index]]
+            if counter is 0: # To avoid division by 0
+                counter = 1
             weights[index] = weights[index] * 1 / counter
         return weights
 
