@@ -6,8 +6,7 @@ class Rule:
         self.params = kwargs
 
     def choice(self, name, options=None):
-        generator = get_generator()
-        return generator.choice(name, options)
+        return get_generator().choice(name, options)
 
     def format(self, template, **templateVars):
         startTemp = '<START_BRACKET>'
@@ -21,6 +20,9 @@ class Rule:
         result = result.replace(startTemp, '{')
         result = result.replace(endTemp, '}')
         return result
+
+    def set_label(self, label):
+        get_generator().set_label(label)
 
     def render(self):
         raise NotImplementedError

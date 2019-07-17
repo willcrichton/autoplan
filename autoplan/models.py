@@ -55,8 +55,8 @@ class ProgramClassifier(nn.Module):
         self.classifier = nn.Linear(self.encoder.hidden_size, self.num_labels)
         self.to(device=device)
 
-    def forward(self, input_sequence, seq_lengths):
-        hidden = self.encoder(input_sequence, seq_lengths)
+    def forward(self, program, program_len):
+        hidden = self.encoder(program, program_len)
 
         # Run the classifier on the hidden state to predict the final class
         return self.classifier(hidden).squeeze(0)

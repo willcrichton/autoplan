@@ -22,6 +22,9 @@ class ProgramGenerator:
         self.choices_counter = defaultdict(int) # Initializes the choices over a production cycle, not a program
         self.adaptive = adaptive
 
+    def set_label(self, label):
+        self.label = label 
+
     def apply_penalties(self, values, weights):
         counter = 0 
         for index in range(len(values)):
@@ -58,7 +61,9 @@ class ProgramGenerator:
         else:
             self.choice_options = self.production_choices
         self.choices = OrderedDict() # Specific program choices are always reset
+        self.label = None
 
         return (self.grammar.render(),
-                [('START', 0)] + [(k, v[0]) for k, v in self.choices.items()],
-                {'START': [(1., None)], **self.choice_options})
+            [('START', 0)] + [(k, v[0]) for k, v in self.choices.items()],
+            {'START': [(1., None)], **self.choice_options}, 
+            self.label)

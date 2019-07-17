@@ -34,8 +34,10 @@ class Exponential(Rule):
         uses_method = self.choice('uses_method', {True: 5, False: 10})
         var = self.params['var']
         if uses_method:
+            self.set_label(PythagoreanLabels.UsesMathPow)
             return f'Math.pow({var}, 2)'
         else:
+            self.set_label(PythagoreanLabels.UsesInlineCalculation)
             return f'{var} * {var}'
 
 

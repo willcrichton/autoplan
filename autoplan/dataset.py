@@ -15,6 +15,8 @@ class Dataset:
     train_dataset: TorchDataset
     val_dataset: TorchDataset
     vocab_size: int
+    label_set: Labels
+    class_balance: List[float]
     choices: Dict[str, torch.Tensor]
     choice_indices: Dict[str, int]
 
@@ -39,31 +41,43 @@ class Dataset:
         return collated
 
 
-def build_synthetic_dataset(N_train, N_val, tokenizer, generator):
-    programs, choices, choice_options = unzip([generator.generate() for _ in range(N_train + N_val)])
+def build_synthetic_dataset(label_set, N_train, N_val, tokenizer, generator):
+    programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N_train + N_val)])
 
+    # Grammar parser
     tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs)
     vocab_size = len(token_to_index)
 
     all_choices = {}
     for opts in choice_options:
         all_choices = {**opts, **all_choices}
-
     choice_indices = {s: i for i, s in enumerate(all_choices.keys())}
 
-    train_dataset = ProgramDataset(token_indices[:N_train], choices[:N_train], choice_indices)
-    val_dataset = ProgramDataset(token_indices[N_train:], choices[N_train:], choice_indices)
+    # Logistic classification
+    label_list = list(label_set)
+    program_labels = [torch.tensor(int(prog_label), dtype=torch.long) for prog_label in labels]
+    
+    class_hist = {lbl: 0 for lbl in label_list}
+    for lbl in labels[:N_train]:
+        class_hist[lbl] += 1
+    class_balance = torch.tensor([class_hist[lbl] / sum(class_hist.values()) for lbl in label_list])
+
+    train_dataset = ProgramDataset(token_indices[:N_train], choices[:N_train], choice_indices, program_labels[:N_train])
+    val_dataset = ProgramDataset(token_indices[N_train:], choices[N_train:], choice_indices, program_labels[:N_train])
 
     return Dataset(train_dataset=train_dataset,
                    val_dataset=val_dataset,
                    vocab_size=vocab_size,
+                   label_set=label_list,
+                   class_balance=class_balance,
                    choices=all_choices,
                    choice_indices=choice_indices)
 
 
 class ProgramDataset(TorchDataset):
-    def __init__(self, token_indices, choices, choice_index_map):
+    def __init__(self, token_indices, choices, choice_index_map, labels):
         self.token_indices = token_indices
+        self.labels = labels
         self.traces = [
             tensor([choice_index_map[name] for (name, choice) in cs])
             for cs in choices
@@ -82,5 +96,6 @@ class ProgramDataset(TorchDataset):
         return {
             'program': self.token_indices[idx],
             'trace': self.traces[idx],
-            'choices': self.choices[idx]
+            'choices': self.choices[idx],
+            'labels': self.labels[idx]
         }
