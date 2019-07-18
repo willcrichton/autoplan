@@ -1,4 +1,4 @@
-from torch import nn 
+from torch import nn
 import torch
 import torch.optim as optim
 from .models import NeuralParser, ProgramClassifier

@@ -56,14 +56,14 @@ def build_synthetic_dataset(label_set, N_train, N_val, tokenizer, generator):
     # Logistic classification
     label_list = list(label_set)
     program_labels = [torch.tensor(int(prog_label), dtype=torch.long) for prog_label in labels]
-    
+
     class_hist = {lbl: 0 for lbl in label_list}
     for lbl in labels[:N_train]:
         class_hist[lbl] += 1
     class_balance = torch.tensor([class_hist[lbl] / sum(class_hist.values()) for lbl in label_list])
 
     train_dataset = ProgramDataset(token_indices[:N_train], choices[:N_train], choice_indices, program_labels[:N_train])
-    val_dataset = ProgramDataset(token_indices[N_train:], choices[N_train:], choice_indices, program_labels[:N_train])
+    val_dataset = ProgramDataset(token_indices[N_train:], choices[N_train:], choice_indices, program_labels[N_train:])
 
     return Dataset(train_dataset=train_dataset,
                    val_dataset=val_dataset,
