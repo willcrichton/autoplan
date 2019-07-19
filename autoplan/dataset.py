@@ -18,8 +18,8 @@ class BaseDataset:
     label_set: Labels
     class_balance: List[float]
 
-    def loader(self, dataset, batch_size=100):
-        return DataLoader(dataset,
+    def loader(self, data, batch_size=100):
+        return DataLoader(data,
                           batch_size=batch_size,
                           collate_fn=self._collate)
 
@@ -67,7 +67,6 @@ class BaseDataset:
 class SyntheticDataset(BaseDataset):
     choices: Dict[str, List[Tuple[float, str]]]
     choice_indices: Dict[str, int]
-
 
 @dataclass
 class PrelabeledDataset(BaseDataset):
