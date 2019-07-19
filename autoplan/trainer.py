@@ -85,7 +85,7 @@ class ClassifierTrainer(BaseTrainer):
 
         # If our classes are imbalanced, then the weights on the loss encourage the network
         # to not just predict the class balance after training.
-        self.loss_fn = nn.CrossEntropyLoss(weight=1/dataset.class_balance)
+        self.loss_fn = nn.CrossEntropyLoss(weight=1/train_dataset.class_balance)
 
         # Optimizer modulates how fast the network learns during training
         self.optimizer = optim.Adam(self.model.parameters())
@@ -93,12 +93,11 @@ class ClassifierTrainer(BaseTrainer):
         # Convert datasets into data loaders to fetch batches of sequences
         self.dataset = dataset
         self.train_loader, self.val_loader = dataset.split_train_val(val_frac)
-
         self.class_names = [str(cls).split('.')[1] for cls in dataset.label_set]
 
     def train_one_epoch(self):
         total_loss = 0
-        for batch in self.train_loader:
+        # for batch in self.train_loader:
             # Reset all gradients
             self.optimizer.zero_grad()
 
@@ -130,7 +129,6 @@ class ClassifierTrainer(BaseTrainer):
         return ClassEvaluation.from_preds(true, pred, self.class_names)
 
 
-
 class ParserTrainer(BaseTrainer):
     def __init__(self, dataset, device=None, batch_size=100, model_opts={}):
         self.model = NeuralParser(dataset, device, **model_opts)
@@ -151,7 +149,7 @@ class ParserTrainer(BaseTrainer):
 
     def train_one_epoch(self):
         total_loss = 0
-        for batch in self.train_loader:
+        # for batch in self.train_loader:
             self.optimizer.zero_grad()
 
             preds = self.model.forward(
