@@ -2,7 +2,8 @@ from torch import nn
 import torch
 import torch.optim as optim
 from .models import NeuralParser, ProgramClassifier
-
+from collections import defaultdict
+from sklearn.metrics import confusion_matrix
 
 # TODO: this class is out of date since datasets changed
 class ClassifierTrainer:
@@ -60,23 +61,25 @@ class ClassifierTrainer:
 
 
 class ParserTrainer:
-    def __init__(self, grammar, dataset, device=None, batch_size=100):
-        self.model = NeuralParser(dataset, device)
+    def __init__(self, dataset, device=None, batch_size=100, model_params={}):
+        self.model = NeuralParser(dataset, device, **model_params)
         self.train_loader = dataset.loader(dataset.train_dataset)
         self.val_loader = dataset.loader(dataset.val_dataset)
         self.optimizer = optim.Adam(self.model.parameters())
         self.loss_fn = nn.CrossEntropyLoss()
+        self.dataset = dataset
 
     def train_one_epoch(self):
         total_loss = 0
         for batch in self.train_loader:
             self.optimizer.zero_grad()
 
-            preds = self.model.forward(**batch)
+            preds = self.model.forward(
+                batch['program'], batch['program_len'], batch['trace'], batch['trace_len'], batch['choices'])
 
             loss = 0
             for i in range(len(preds)):
-                for t in range(len(preds[i]) - 1):
+                for t in range(len(preds[i])):
                     loss += self.loss_fn(
                         preds[i][t].unsqueeze(0).cpu(),
                         batch['choices'][i][t+1].unsqueeze(0).cpu())
@@ -89,12 +92,29 @@ class ParserTrainer:
         return total_loss
 
     def eval(self):
-        correct = 0
+        self.model.eval()
+
+        choice_true = defaultdict(list)
+        choice_pred = defaultdict(list)
+        num_correct = 0
         total = 0
         for batch in self.val_loader:
-            pred_choices = self.model.predict(**batch)
-            for (pred, true) in zip(pred_choices, batch['choices']):
-                correct += (pred == true[1:]).sum().item()
+            pred_choices = self.model.predict(
+                batch['program'], batch['program_len'], batch['trace'], batch['trace_len'], batch['choices'])
+            for (trace, pred, true) in zip(batch['trace'], pred_choices, batch['choices']):
+                for (choice_index, value_pred, value_true) in zip(trace[1:], pred, true[1:]):
+                    choice_pred[choice_index.item()].append(value_pred.item())
+                    choice_true[choice_index.item()].append(value_true.item())
+
+                correct = pred == true[1:]
+                num_correct += correct.sum().item()
                 total += pred.size(0)
 
-        return correct / total
+        index_to_name = {v: k for k, v in self.dataset.choice_indices.items()}
+        cms = {
+            index_to_name[i]: confusion_matrix(choice_true[i], choice_pred[i])
+            for i in choice_true.keys()
+        }
+
+        self.model.train()
+        return num_correct / total, cms

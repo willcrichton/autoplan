@@ -5,7 +5,7 @@ from torch import tensor
 from torch.utils.data import Dataset as TorchDataset, DataLoader
 from iterextras import unzip
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 
@@ -17,7 +17,7 @@ class Dataset:
     vocab_size: int
     label_set: Labels
     class_balance: List[float]
-    choices: Dict[str, torch.Tensor]
+    choices: Dict[str, List[Tuple[float, str]]]
     choice_indices: Dict[str, int]
 
     def loader(self, dataset, batch_size=100):
@@ -39,6 +39,16 @@ class Dataset:
                 [F.pad(seq, [0, max_len - seq.size(0)]) for seq in seqs])
             collated[k + '_len'] = seq_lens
         return collated
+
+    # Takes a ProgramDataset item and converts the trace/choice indices to readable strings
+    # e.g. dataset.readable_choices(dataset.train_dataset[0])
+    def readable_choices(self, item):
+        choice_names = {v: k for k, v in self.choice_indices.items()}
+        return [
+            (choice_names[name_index.item()],
+             self.choices[choice_names[name_index.item()]][value_index][1])
+            for name_index, value_index in zip(item['trace'], item['choices'])
+        ]
 
 
 def build_synthetic_dataset(label_set, N_train, N_val, tokenizer, generator):
@@ -62,8 +72,10 @@ def build_synthetic_dataset(label_set, N_train, N_val, tokenizer, generator):
         class_hist[lbl] += 1
     class_balance = torch.tensor([class_hist[lbl] / sum(class_hist.values()) for lbl in label_list])
 
-    train_dataset = ProgramDataset(token_indices[:N_train], choices[:N_train], choice_indices, program_labels[:N_train])
-    val_dataset = ProgramDataset(token_indices[N_train:], choices[N_train:], choice_indices, program_labels[N_train:])
+    train_dataset = ProgramDataset(
+        programs[:N_train], token_indices[:N_train], choices[:N_train], choice_indices, program_labels[:N_train])
+    val_dataset = ProgramDataset(
+        programs[N_train:], token_indices[N_train:], choices[N_train:], choice_indices, program_labels[N_train:])
 
     return Dataset(train_dataset=train_dataset,
                    val_dataset=val_dataset,
@@ -75,7 +87,8 @@ def build_synthetic_dataset(label_set, N_train, N_val, tokenizer, generator):
 
 
 class ProgramDataset(TorchDataset):
-    def __init__(self, token_indices, choices, choice_index_map, labels):
+    def __init__(self, programs, token_indices, choices, choice_index_map, labels):
+        self.programs = programs
         self.token_indices = token_indices
         self.labels = labels
         self.traces = [
@@ -94,6 +107,7 @@ class ProgramDataset(TorchDataset):
 
     def __getitem__(self, idx):
         return {
+            'source': self.programs[idx],
             'program': self.token_indices[idx],
             'trace': self.traces[idx],
             'choices': self.choices[idx],

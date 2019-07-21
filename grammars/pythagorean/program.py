@@ -1,5 +1,4 @@
 from autoplan.grammar import Rule
-from autoplan.distributions import Categorical
 from autoplan.labels import Labels
 
 

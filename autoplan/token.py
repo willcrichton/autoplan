@@ -1,5 +1,7 @@
 import torch
-
+import subprocess as sp
+import os
+import json
 
 class Tokenizer:
     def tokenize(self, program_string):
@@ -33,3 +35,13 @@ class JavaTokenizer(Tokenizer):
                 yield typ
             else:
                 yield (typ, value)
+
+
+class OCamlTokenizer(Tokenizer):
+    def tokenize(self, program_string):
+        file_dir = os.path.dirname(os.path.abspath(__file__))
+        binary = f'{file_dir}/tokenizers/ocaml/main.native'
+        p = sp.Popen([binary], stdin=sp.PIPE, stdout=sp.PIPE)
+        tokens = json.loads(p.communicate(input=program_string.encode())[0].decode('utf-8'))
+        for pair in tokens:
+            yield tuple(pair)
