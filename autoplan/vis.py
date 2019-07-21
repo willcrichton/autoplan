@@ -2,6 +2,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import math
 import numpy as np
+import pandas as pd
+
+def plot_accuracy(evals, ax=None):
+    return pd.Series([e.accuracy for e in evals]).plot(ax=ax)
 
 def plot_cm(ax, name, cm, classes):
     cm = cm / cm.sum(axis=1)[:, np.newaxis]
@@ -12,17 +16,24 @@ def plot_cm(ax, name, cm, classes):
     ax.set_yticklabels(classes, rotation=45)
     ax.set_title(name)
 
-def plot_all_cm(dataset, cms):
-    fig, axes = plt.subplots(len(cms), 1)
-    fig.set_size_inches(8, len(cms) * 5 )
+def plot_all_cm(eval):
+    fig, axes = plt.subplots(len(eval), 1)
+    fig.set_size_inches(8, len(eval) * 5)
 
-    def truncate(string, N=20):
-        if len(string) > N:
-            return string[:N-3] + '...'
-        else:
-            return string
+    for ax, k in zip(axes, eval):
+        eval[k].plot_cm(ax=ax, title=k)
 
-    for ax, k in zip(axes, cms):
-        plot_cm(ax, k, cms[k], [truncate(str(name)) for _, name in dataset.choices[k]])
+    plt.tight_layout()
+
+
+def plot_all_accuracy(evals):
+    N = len(evals[0])
+    fig, axes = plt.subplots(math.ceil(N/2), 2)
+    fig.set_size_inches(8, N/2 * 3)
+    axes = [ax for l in axes for ax in l]
+
+    for ax, k in zip(axes, evals[0]):
+        plot_accuracy([e[k] for e in evals], ax=ax)
+        ax.set_title(k)
 
     plt.tight_layout()

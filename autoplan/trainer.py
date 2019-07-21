@@ -4,10 +4,43 @@ import torch.optim as optim
 from .models import NeuralParser, ProgramClassifier
 from collections import defaultdict
 from sklearn.metrics import confusion_matrix
+from dataclasses import dataclass
+from typing import List
+import numpy as np
 
-# TODO: this class is out of date since datasets changed
-class ClassifierTrainer:
-    def __init__(self, model, dataset, device=None, batch_size=100):
+@dataclass
+class ClassEvaluation:
+    confusion_matrix: List[List[int]]
+    classes: List[str]
+    accuracy: float
+
+    @classmethod
+    def from_preds(cls, true, pred, classes):
+        true = np.array(true)
+        pred = np.array(pred)
+        return cls(
+            confusion_matrix=confusion_matrix(true, pred),
+            accuracy=(true == pred).sum() / len(true),
+            classes=classes)
+
+    def plot_cm(self, ax=None, title='Confusion matrix'):
+        from .vis import plot_cm
+        import matplotlib.pyplot as plt
+        return plot_cm(plt.gca() if ax is None else ax,
+                       title, self.confusion_matrix, self.classes)
+
+
+class BaseTrainer:
+    def eval(self):
+        self.model.eval()
+        train_eval = self._eval_on(self.train_loader)
+        val_eval = self._eval_on(self.val_loader)
+        self.model.train()
+        return train_eval, val_eval
+
+
+class ClassifierTrainer(BaseTrainer):
+    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.2):
         self.device = device if device is not None else torch.device('cpu')
 
         # Create model from provided class
@@ -21,9 +54,9 @@ class ClassifierTrainer:
         self.optimizer = optim.Adam(self.model.parameters())
 
         # Convert datasets into data loaders to fetch batches of sequences
-        self.train_loader = dataset.loader(dataset.train_dataset)
-        self.val_loader = dataset.loader(dataset.val_dataset)
+        self.train_loader, self.val_loader = dataset.split_train_val(val_frac)
 
+        self.class_names = [str(cls).split('.')[1] for cls in dataset.label_set]
 
     def train_one_epoch(self):
         total_loss = 0
@@ -50,24 +83,33 @@ class ClassifierTrainer:
                                 program_len=program_len)
         return pred_label.topk(1, dim=1)[1].squeeze().cpu()
 
-    def eval(self):
-        correct = 0
-        total = 0
-        for batch in self.val_loader:
-            pred_label = self.predict(batch['program'], batch['program_len'])
-            correct += (pred_label == batch['labels']).sum().item()
-            total += pred_label.numel()
-        return correct / total
+    def _eval_on(self, loader):
+        true = []
+        pred = []
+        for batch in loader:
+            true.extend(batch['labels'])
+            pred.extend(self.predict(batch['program'], batch['program_len']).tolist())
+        return ClassEvaluation.from_preds(true, pred, self.class_names)
 
 
-class ParserTrainer:
+
+class ParserTrainer(BaseTrainer):
     def __init__(self, dataset, device=None, batch_size=100, model_params={}):
         self.model = NeuralParser(dataset, device, **model_params)
-        self.train_loader = dataset.loader(dataset.train_dataset)
-        self.val_loader = dataset.loader(dataset.val_dataset)
+        self.train_loader, self.val_loader = dataset.split_train_val()
         self.optimizer = optim.Adam(self.model.parameters())
         self.loss_fn = nn.CrossEntropyLoss()
         self.dataset = dataset
+        self.label_names = {
+            k: [self._truncate(str(name)) for _, name in dataset.choices[k]]
+            for k in dataset.choices
+        }
+
+    def _truncate(self, string, N=20):
+        if len(string) > N:
+            return string[:N-3] + '...'
+        else:
+            return string
 
     def train_one_epoch(self):
         total_loss = 0
@@ -91,13 +133,9 @@ class ParserTrainer:
 
         return total_loss
 
-    def eval(self):
-        self.model.eval()
-
+    def _eval_on(self, loader):
         choice_true = defaultdict(list)
         choice_pred = defaultdict(list)
-        num_correct = 0
-        total = 0
         for batch in self.val_loader:
             pred_choices = self.model.predict(
                 batch['program'], batch['program_len'], batch['trace'], batch['trace_len'], batch['choices'])
@@ -106,15 +144,9 @@ class ParserTrainer:
                     choice_pred[choice_index.item()].append(value_pred.item())
                     choice_true[choice_index.item()].append(value_true.item())
 
-                correct = pred == true[1:]
-                num_correct += correct.sum().item()
-                total += pred.size(0)
-
         index_to_name = {v: k for k, v in self.dataset.choice_indices.items()}
-        cms = {
-            index_to_name[i]: confusion_matrix(choice_true[i], choice_pred[i])
+        return {
+            index_to_name[i]: ClassEvaluation.from_preds(
+                choice_true[i], choice_pred[i], self.label_names[index_to_name[i]])
             for i in choice_true.keys()
         }
-
-        self.model.train()
-        return num_correct / total, cms

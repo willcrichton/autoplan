@@ -2,23 +2,21 @@ from .labels import Labels
 from .generator import ProgramGenerator
 import torch
 from torch import tensor
-from torch.utils.data import Dataset as TorchDataset, DataLoader
+from torch.utils.data import Dataset as TorchDataset, DataLoader, random_split
 from iterextras import unzip
 from dataclasses import dataclass
 from typing import List, Dict, Tuple
 from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
+import pickle
 
 
 @dataclass
-class Dataset:
-    train_dataset: TorchDataset
-    val_dataset: TorchDataset
+class BaseDataset:
+    dataset: TorchDataset
     vocab_size: int
     label_set: Labels
     class_balance: List[float]
-    choices: Dict[str, List[Tuple[float, str]]]
-    choice_indices: Dict[str, int]
 
     def loader(self, dataset, batch_size=100):
         return DataLoader(dataset,
@@ -32,6 +30,8 @@ class Dataset:
                                      for k, v in item.items() if k not in seq_keys}
                                     for item in batch])
         for k in seq_keys:
+            if not k in batch[0]:
+                continue
             seqs = [item[k] for item in batch]
             seq_lens = tensor([s.size(0) for s in seqs])
             max_len = max(seq_lens)
@@ -50,9 +50,32 @@ class Dataset:
             for name_index, value_index in zip(item['trace'], item['choices'])
         ]
 
+    def split_train_val(self, val_frac=0.2):
+        N = len(self.dataset)
+        val_size = int(N * val_frac)
+        return tuple(map(lambda ds: self.loader(ds),
+                         random_split(self.dataset, [N - val_size, val_size])))
 
-def build_synthetic_dataset(label_set, N_train, N_val, tokenizer, generator):
-    programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N_train + N_val)])
+    def save(self, path):
+        pickle.dump(self, open(path, 'wb'))
+
+    @staticmethod
+    def load(path):
+        return pickle.load(open(path, 'rb'))
+
+@dataclass
+class SyntheticDataset(BaseDataset):
+    choices: Dict[str, List[Tuple[float, str]]]
+    choice_indices: Dict[str, int]
+
+
+@dataclass
+class PrelabeledDataset(BaseDataset):
+    pass
+
+
+def build_synthetic_dataset(label_set, N, tokenizer, generator):
+    programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N)])
 
     # Grammar parser
     tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs)
@@ -68,48 +91,75 @@ def build_synthetic_dataset(label_set, N_train, N_val, tokenizer, generator):
     program_labels = [torch.tensor(int(prog_label), dtype=torch.long) for prog_label in labels]
 
     class_hist = {lbl: 0 for lbl in label_list}
-    for lbl in labels[:N_train]:
+    for lbl in labels:
         class_hist[lbl] += 1
     class_balance = torch.tensor([class_hist[lbl] / sum(class_hist.values()) for lbl in label_list])
 
-    train_dataset = ProgramDataset(
-        programs[:N_train], token_indices[:N_train], choices[:N_train], choice_indices, program_labels[:N_train])
-    val_dataset = ProgramDataset(
-        programs[N_train:], token_indices[N_train:], choices[N_train:], choice_indices, program_labels[N_train:])
+    dataset = ProgramDataset(
+        programs, token_indices, program_labels, choices, choice_indices)
 
-    return Dataset(train_dataset=train_dataset,
-                   val_dataset=val_dataset,
-                   vocab_size=vocab_size,
-                   label_set=label_list,
-                   class_balance=class_balance,
-                   choices=all_choices,
-                   choice_indices=choice_indices)
+    return SyntheticDataset(
+        dataset=dataset,
+        vocab_size=vocab_size,
+        label_set=label_list,
+        class_balance=class_balance,
+        choices=all_choices,
+        choice_indices=choice_indices)
+
+
+def build_prelabeled_dataset(label_set, programs, labels, tokenizer):
+    tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs)
+    vocab_size = len(token_to_index)
+
+    label_list = list(label_set)
+    program_labels = [torch.tensor(int(prog_label), dtype=torch.long) for prog_label in labels]
+
+    class_hist = {lbl: 0 for lbl in label_list}
+    for lbl in labels:
+        class_hist[lbl] += 1
+    class_balance = torch.tensor([class_hist[lbl] / sum(class_hist.values()) for lbl in label_list])
+
+    return PrelabeledDataset(
+        dataset=ProgramDataset(programs, token_indices, labels),
+        vocab_size=vocab_size,
+        label_set=label_list,
+        class_balance=class_balance)
 
 
 class ProgramDataset(TorchDataset):
-    def __init__(self, programs, token_indices, choices, choice_index_map, labels):
-        self.programs = programs
-        self.token_indices = token_indices
-        self.labels = labels
-        self.traces = [
-            tensor([choice_index_map[name] for (name, choice) in cs])
-            for cs in choices
+    def __init__(self, programs, token_indices, labels, choices=None, choice_index_map=None):
+        self.items = [
+            {
+                'source': programs[idx],
+                'program': token_indices[idx],
+                'labels': labels[idx],
+            }
+            for idx in range(len(token_indices))
         ]
-        self.choices = [
-            torch.zeros(len(choice_index_map), dtype=torch.long).scatter(
-                dim=0, index=tensor([choice_index_map[name] for name, _ in cs]),
-                src=tensor([choice for _, choice in cs]))
-            for cs in choices
-        ]
+
+        if choices is not None:
+            traces = [
+                tensor([choice_index_map[name] for (name, choice) in cs])
+                for cs in choices
+            ]
+
+            choices = [
+                torch.zeros(len(choice_index_map), dtype=torch.long).scatter(
+                    dim=0, index=tensor([choice_index_map[name] for name, _ in cs]),
+                    src=tensor([choice for _, choice in cs]))
+                for cs in choices
+            ]
+
+            self.items = [
+                {**self.items[idx], **{
+                    'trace': traces[idx],
+                    'choices': choices[idx],
+                }}
+                for idx in range(len(token_indices))
+            ]
 
     def __len__(self):
-        return len(self.token_indices)
+        return len(self.items)
 
     def __getitem__(self, idx):
-        return {
-            'source': self.programs[idx],
-            'program': self.token_indices[idx],
-            'trace': self.traces[idx],
-            'choices': self.choices[idx],
-            'labels': self.labels[idx]
-        }
+        return self.items[idx]
