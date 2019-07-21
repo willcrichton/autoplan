@@ -35,5 +35,6 @@ def plot_all_accuracy(evals):
     for ax, k in zip(axes, evals[0]):
         plot_accuracy([e[k] for e in evals], ax=ax)
         ax.set_title(k)
+        ax.set_ylim(0, 1)
 
     plt.tight_layout()
