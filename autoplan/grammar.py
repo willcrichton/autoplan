@@ -1,5 +1,5 @@
 from .generator import get_generator
-
+from jinja2 import Template
 
 class Rule:
     def __init__(self, **kwargs):
@@ -9,17 +9,7 @@ class Rule:
         return get_generator().choice(name, options)
 
     def format(self, template, **templateVars):
-        startTemp = '<START_BRACKET>'
-        endTemp = '<END_BRACKET>'
-        template = template.replace('{{', startTemp)
-        template = template.replace('}}', endTemp)
-
-        result = template.format(**templateVars)
-
-        # Output programs
-        result = result.replace(startTemp, '{')
-        result = result.replace(endTemp, '}')
-        return result
+        return Template(template).render(**templateVars)
 
     def set_label(self, label):
         get_generator().set_label(label)

@@ -7,8 +7,9 @@ import pandas as pd
 def plot_accuracy(evals, ax=None):
     return pd.Series([e.accuracy for e in evals]).plot(ax=ax)
 
-def plot_cm(ax, name, cm, classes):
-    cm = cm / cm.sum(axis=1)[:, np.newaxis]
+def plot_cm(ax, name, cm, classes, normalize=True):
+    if normalize:
+        cm = cm / cm.sum(axis=1)[:, np.newaxis]
     sns.heatmap(cm, annot=True, ax=ax)
     ax.set_xlabel('Pred class')
     ax.set_ylabel('True class')

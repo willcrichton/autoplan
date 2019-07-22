@@ -13,7 +13,6 @@ class ProgramEncoder(nn.Module):
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-
         # Define graph architecture
         self.embedding = nn.Embedding(dataset.vocab_size, self.embedding_size)
         self.rnn = nn.RNN(input_size=self.embedding_size,
@@ -47,11 +46,11 @@ class ProgramEncoder(nn.Module):
 
 
 class ProgramClassifier(nn.Module):
-    def __init__(self, dataset, device):
+    def __init__(self, dataset, device, **kwargs):
         super().__init__()
 
         self.num_labels = len(dataset.label_set)
-        self.encoder = ProgramEncoder(dataset, device)
+        self.encoder = ProgramEncoder(dataset, device, **kwargs)
         self.classifier = nn.Linear(self.encoder.hidden_size, self.num_labels)
         self.to(device=device)
 

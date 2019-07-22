@@ -13,12 +13,12 @@ class Program(Rule):
             self.choice(f'str_choice{i}', {'a': 1, 'b': 1})
 
         template = '''
-            public class PythagoreanTheorem extends ConsoleProgram {{
-                public void run() {{
-                     {num_type} {var} = {read_function}("Foobar:");
-                     {print_function}({var});
-                }}
-            }}
+            public class PythagoreanTheorem extends ConsoleProgram {
+                public void run() {
+                     {{num_type}} {{var}} = {{read_function}}("Foobar:");
+                     {{print_function}}({{var}});
+                }
+            }
         '''
 
         self.set_label(SimpleLabels.Ignore)

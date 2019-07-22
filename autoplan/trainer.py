@@ -23,28 +23,28 @@ class ClassEvaluation:
             accuracy=(true == pred).sum() / len(true),
             classes=classes)
 
-    def plot_cm(self, ax=None, title='Confusion matrix'):
+    def plot_cm(self, ax=None, title='Confusion matrix', normalize=True):
         from .vis import plot_cm
         import matplotlib.pyplot as plt
         return plot_cm(plt.gca() if ax is None else ax,
-                       title, self.confusion_matrix, self.classes)
+                       title, self.confusion_matrix, self.classes, normalize)
 
 
 class BaseTrainer:
     def eval(self):
         self.model.eval()
-        train_eval = self._eval_on(self.train_loader)
-        val_eval = self._eval_on(self.val_loader)
+        train_eval = self.eval_on(self.train_loader)
+        val_eval = self.eval_on(self.val_loader)
         self.model.train()
         return train_eval, val_eval
 
 
 class ClassifierTrainer(BaseTrainer):
-    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.2):
+    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.2, model_opts={}):
         self.device = device if device is not None else torch.device('cpu')
 
         # Create model from provided class
-        self.model = ProgramClassifier(dataset, self.device)
+        self.model = ProgramClassifier(dataset, self.device, **model_opts)
 
         # If our classes are imbalanced, then the weights on the loss encourage the network
         # to not just predict the class balance after training.
@@ -83,7 +83,7 @@ class ClassifierTrainer(BaseTrainer):
                                 program_len=program_len)
         return pred_label.topk(1, dim=1)[1].squeeze().cpu()
 
-    def _eval_on(self, loader):
+    def eval_on(self, loader):
         true = []
         pred = []
         for batch in loader:
@@ -133,7 +133,7 @@ class ParserTrainer(BaseTrainer):
 
         return total_loss
 
-    def _eval_on(self, loader):
+    def eval_on(self, loader):
         choice_true = defaultdict(list)
         choice_pred = defaultdict(list)
         for batch in self.val_loader:

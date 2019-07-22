@@ -10,11 +10,11 @@ from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 import pickle
 
-
 @dataclass
 class BaseDataset:
     dataset: TorchDataset
     vocab_size: int
+    vocab_index: Dict[str, int]
     label_set: Labels
     class_balance: List[float]
 
@@ -74,13 +74,17 @@ class PrelabeledDataset(BaseDataset):
     pass
 
 
-def build_synthetic_dataset(label_set, N, tokenizer, generator):
+def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None):
+    print('Generating programs...')
     programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N)])
+    print('Generated {} unique programs.'.format(len(set(programs))))
 
     # Grammar parser
-    tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs)
+    print('Tokenizing programs...')
+    tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs, vocab_index)
     vocab_size = len(token_to_index)
 
+    print('Building dataset metadata...')
     all_choices = {}
     for opts in choice_options:
         all_choices = {**opts, **all_choices}
@@ -101,6 +105,7 @@ def build_synthetic_dataset(label_set, N, tokenizer, generator):
     return SyntheticDataset(
         dataset=dataset,
         vocab_size=vocab_size,
+        vocab_index=token_to_index,
         label_set=label_list,
         class_balance=class_balance,
         choices=all_choices,
@@ -120,8 +125,9 @@ def build_prelabeled_dataset(label_set, programs, labels, tokenizer):
     class_balance = torch.tensor([class_hist[lbl] / sum(class_hist.values()) for lbl in label_list])
 
     return PrelabeledDataset(
-        dataset=ProgramDataset(programs, token_indices, labels),
+        dataset=ProgramDataset(programs, token_indices, program_labels),
         vocab_size=vocab_size,
+        vocab_index=token_to_index,
         label_set=label_list,
         class_balance=class_balance)
 
