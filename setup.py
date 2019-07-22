@@ -9,6 +9,6 @@ if __name__ == "__main__":
           author='Will Crichton and Georgia Sampaio',
           author_email='wcrichto@cs.stanford.edu',
           license='Apache 2.0',
-          install_requires=['torch >= 1.0.0'],
+          install_requires=['torch >= 1.0.0', 'scikit-learn >= 0.21.2', 'jinja2 >= 2.10.2', 'iterextras'],
           packages=['autoplan'],
           zip_safe=False)

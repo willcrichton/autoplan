@@ -5,15 +5,14 @@ import torch.nn.functional as F
 
 
 class ProgramEncoder(nn.Module):
-    def __init__(self, dataset, device, embedding_size=300, hidden_size=256):
+    def __init__(self, dataset, device, embedding_size=300, hidden_size=256, num_layers=1):
         super().__init__()
 
         # Setup various constants
         self.device = device
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
-        self.num_layers = 1
-
+        self.num_layers = num_layers
         # Define graph architecture
         self.embedding = nn.Embedding(dataset.vocab_size, self.embedding_size)
         self.rnn = nn.RNN(input_size=self.embedding_size,
@@ -47,11 +46,11 @@ class ProgramEncoder(nn.Module):
 
 
 class ProgramClassifier(nn.Module):
-    def __init__(self, dataset, device):
+    def __init__(self, dataset, device, **kwargs):
         super().__init__()
 
         self.num_labels = len(dataset.label_set)
-        self.encoder = ProgramEncoder(dataset, device)
+        self.encoder = ProgramEncoder(dataset, device, **kwargs)
         self.classifier = nn.Linear(self.encoder.hidden_size, self.num_labels)
         self.to(device=device)
 
@@ -63,17 +62,17 @@ class ProgramClassifier(nn.Module):
 
 
 class NeuralParser(nn.Module):
-    def __init__(self, dataset, device):
+    def __init__(self, dataset, device, embedding_size=300, hidden_size=256, hidden_dropout=0.2):
         super().__init__()
 
         self.device = device
-        self.hidden_size = 256
-        self.embedding_size = 300
+        self.embedding_size = embedding_size
+        self.hidden_size = hidden_size
         self.choice_indices = dataset.choice_indices
         name_order = sorted(dataset.choices.keys(), key=lambda name: self.choice_indices[name])
 
         # Inputs
-        self.encoder = ProgramEncoder(dataset, device)
+        self.encoder = ProgramEncoder(dataset, device, embedding_size, hidden_size)
         self.index_embedding = nn.Embedding(
             num_embeddings=len(dataset.choices),
             embedding_dim=self.embedding_size)
@@ -86,6 +85,7 @@ class NeuralParser(nn.Module):
         self.rnn = nn.GRUCell(
             input_size=self.encoder.hidden_size + self.embedding_size * 2,
             hidden_size=self.hidden_size)
+        self.dropout_layer = nn.Dropout(p=hidden_dropout)
 
         # RV prediction
         self.inference = nn.ModuleList([
@@ -111,7 +111,8 @@ class NeuralParser(nn.Module):
 
         input_emb = torch.cat((choice_emb, program_emb, index_emb), dim=1)
 
-        h = self.rnn(input_emb, h)
+        h_dp = self.dropout_layer(h)
+        h = self.rnn(input_emb, h_dp)
         pred = [
             self.inference[cur_choice[i]](h[i, :])
             for i in range(len(cur_choice))

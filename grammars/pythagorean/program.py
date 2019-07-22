@@ -1,5 +1,4 @@
 from autoplan.grammar import Rule
-from autoplan.distributions import Categorical
 from autoplan.labels import Labels
 
 
@@ -57,11 +56,11 @@ class Solution(Rule):
         print_function = self.choice('print_function', {'println': 1, 'print': 1})
 
         template = '''
-        {print_function}("{main_prompt}");
-        {num_type} {first_var} = {read_function}("{input_prompt}{first_var}:");
-        {num_type} {second_var} = {read_function}("{input_prompt}{second_var}:");
-        {num_type} {third_var} = Math.sqrt({exp_first} + {exp_second});
-        {print_function}("{output_prompt}" + {third_var});
+        {{print_function}}("{{main_prompt}}");
+        {{num_type}} {{first_var}} = {{read_function}}("{{input_prompt}}{{first_var}}:");
+        {{num_type}} {{second_var}} = {{read_function}}("{{input_prompt}}{{second_var}}:");
+        {{num_type}} {{third_var}} = Math.sqrt({{exp_first}} + {{exp_second}});
+        {{print_function}}("{{output_prompt}}" + {{third_var}});
         '''
 
         first_var = 'x' if naming_scheme == 'x' else 'a'
@@ -84,10 +83,10 @@ class Solution(Rule):
 class Program(Rule):
     def render(self):
         template = '''
-            public class PythagoreanTheorem extends ConsoleProgram {{
-                public void run() {{
-                    {Solution}
-                }}
-            }}
+            public class PythagoreanTheorem extends ConsoleProgram {
+                public void run() {
+                    {{Solution}}
+                }
+            }
         '''
         return self.format(template, Solution=Solution().render())
