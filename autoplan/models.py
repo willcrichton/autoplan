@@ -13,6 +13,7 @@ class ProgramEncoder(nn.Module):
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+
         # Define graph architecture
         self.embedding = nn.Embedding(dataset.vocab_size, self.embedding_size)
         self.rnn = model(input_size=self.embedding_size,
@@ -36,7 +37,8 @@ class ProgramEncoder(nn.Module):
                                                       enforce_sorted=False)
 
         # Initialize the hidden layer with random values
-        h0 = torch.empty(self.num_layers, batch_size, self.hidden_size).to(device=self.device)
+        h0 = torch.empty(self.num_layers, batch_size, self.hidden_size) \
+                  .to(device=self.device)
         nn.init.xavier_normal_(h0)
 
         # Run the RNN on all sequences
@@ -46,23 +48,13 @@ class ProgramEncoder(nn.Module):
 
 
 class ProgramClassifier(nn.Module):
-    def __init__(self, dataset, device, mlp=False, **kwargs):
+    def __init__(self, dataset, device, **kwargs):
         super().__init__()
 
         self.num_labels = len(dataset.label_set)
         self.encoder = ProgramEncoder(dataset, device, **kwargs)
-        if mlp:
-            self.classifier = nn.Sequential(
-                nn.Dropout(0.2),
-                nn.Linear(self.encoder.hidden_size, 100),
-                nn.ReLU(),
-                nn.BatchNorm1d(100),
-                nn.Linear(100, 25),
-                nn.ReLU(),
-                nn.Linear(25, self.num_labels)
-            )
-        else:
-            self.classifier = nn.Linear(self.encoder.hidden_size, self.num_labels)
+        self.classifier = nn.Linear(self.encoder.hidden_size, self.num_labels)
+
         self.to(device=device)
 
     def forward(self, program, program_len):

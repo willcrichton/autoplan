@@ -15,4 +15,3 @@ The dataset consists of around 400 solutions to the Rainfall problem in a variet
 ## Experiments
 
 * [Simple classifier trained on labeled student data](supervised_simple_classifier.ipynb)
-* [Simple classifier trained on synthetic data](synthetic_simple_classifier.ipynb)
