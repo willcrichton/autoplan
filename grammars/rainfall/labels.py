@@ -5,9 +5,6 @@ class GeneralRainfallLabels(Labels):
     CleanFirst = 0
     CleanInSC = 1
     SingleLoop = 2
-    NoCleaning = 3
-    CleanUpAfter = 4
-    Unclear = 5
 
     @classmethod
     def from_string(cls, s):

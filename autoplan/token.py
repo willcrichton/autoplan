@@ -2,17 +2,48 @@ import torch
 import subprocess as sp
 import os
 import json
-from iterextras import par_for
+from iterextras import par_for, unzip
+from enum import Enum
+
 
 class TokenizerError(Exception):
     pass
 
+
+class TokenType(Enum):
+    Identifier = 0
+    Number = 1
+    String = 2
+
+
 class Tokenizer:
-    def tokenize(self, program_string):
+    def __init__(self, exclude=[TokenType.String, TokenType.Number, TokenType.Identifier],
+                 preprocess=True):
+        self.exclude = exclude
+        self.preprocess = preprocess
+
+    def _token_types(self):
         raise NotImplementedError
 
+    def _tokenize(self, program_string):
+        raise NotImplementedError
+
+    def tokenize(self, program_string):
+        token_types = self._token_types()
+        tokens, program = self._tokenize(program_string)
+
+        def exclude(pair):
+            (ty, val) = pair
+            return ty if ty in token_types and token_types[ty] in self.exclude else pair
+
+        return map(exclude, tokens), program
+
     def tokenize_all(self, program_strings, vocab_index=None):
-        tokens = par_for(lambda s: list(self.tokenize(s)), program_strings)
+        def map_tokenize(s):
+            tokens, program = self.tokenize(s)
+            return list(tokens), program
+        tokens, programs = unzip(
+            par_for(map_tokenize, program_strings, progress=False))
 
         if vocab_index is None:
             token_to_index = {}
@@ -36,48 +67,68 @@ class Tokenizer:
                 for l in tokens
             ]
 
-        return tokens, token_to_index, token_indices
+        return tokens, token_to_index, token_indices, programs
 
-    def _call_tokenizer_process(self, program_string, rel_path):
+    def _call_process(self, dir_name, script_name, input):
         file_dir = os.path.dirname(os.path.abspath(__file__))
-        binary = f'{file_dir}/tokenizers/{rel_path}'
+        binary = f'{file_dir}/tokenizers/{dir_name}/{script_name}'
         p = sp.Popen([binary], stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE,
                      cwd=os.path.dirname(binary))
-        stdout, stderr = p.communicate(input=program_string.encode())
+        stdout, stderr = p.communicate(input=input.encode())
+        return stdout.decode('utf-8'), stderr.decode('utf-8')
+
+    def _call_tokenizer_process(self, program_string, dir_name):
+        if self.preprocess:
+            program_string, stderr = self._call_process(dir_name, 'preprocess.sh',
+                                                        program_string)
+            # if stderr != '':
+            #     raise TokenizerError(program_string, stderr)
+
+        token_json, stderr = self._call_process(dir_name, 'tokenize.sh', program_string)
+        token_json = token_json.replace("\\", "\\\\")
+
         try:
-            return json.loads(stdout.decode('utf-8'))
+            return json.loads(token_json), program_string
         except json.JSONDecodeError:
-            raise TokenizerError(stdout, stderr)
+            raise TokenizerError(token_json, stderr)
 
 
 class JavaTokenizer(Tokenizer):
-    def tokenize(self, program_string):
+    def _token_types(self):
+        import javalang.tokenizer as tokenizer
+        return {
+            tokenizer.String: TokenType.String,
+            tokenizer.Identifier: TokenType.Identifier,
+            tokenizer.Integer: TokenType.Number
+        }
+
+    def _tokenize(self, program_string):
         import javalang.tokenizer as tokenizer
         tokens = tokenizer.tokenize(program_string)
-        for token in tokens:
-            typ = type(token)
-            value = token.value
-            if typ == tokenizer.String:
-                yield typ
-            else:
-                yield (typ, value)
-
+        return map(lambda token: (type(token), token.value)), program_string
 
 class OCamlTokenizer(Tokenizer):
-    def tokenize(self, program_string):
-        tokens = self._call_tokenizer_process(program_string, 'ocaml/main.native')
-        for [k, v] in tokens:
-            if k in ['LIDENT', 'UIDENT', 'STRING']:
-                yield k
-            else:
-                yield (k, v)
+    def _token_types(self):
+        return {
+            'LIDENT': TokenType.Identifier,
+            'UIDENT': TokenType.Identifier,
+            'STRING': TokenType.String
+        }
+
+    def _tokenize(self, program_string):
+        tokens, program = self._call_tokenizer_process(program_string, 'ocaml')
+        return map(tuple, tokens), program
 
 
 class PyretTokenizer(Tokenizer):
-    def tokenize(self, program_string):
-        tokens = self._call_tokenizer_process(program_string, 'pyret/main.sh')
-        for [k, v] in tokens:
-            if k in ['NAME', 'STRING', 'NUMBER', 'RATIONAL']:
-                yield k
-            else:
-                yield (k, v)
+    def _token_types(self):
+        return {
+            'NAME': TokenType.Identifier,
+            'NUMBER': TokenType.Number,
+            'RATIONAL': TokenType.Number,
+            'STRING': TokenType.String
+        }
+
+    def _tokenize(self, program_string):
+        tokens, program = self._call_tokenizer_process(program_string, 'pyret/main.sh')
+        return map(tuple, tokens), program

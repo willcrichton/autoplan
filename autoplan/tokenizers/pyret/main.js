@@ -10,18 +10,17 @@ const R = require("requirejs");
 R.config({
   paths: {
     'jglr': `${PYRET_PATH}/lib/jglr`,
-    'pyret-base': `${PYRET_PATH}/build/phaseA`,
-    'src-base/js': `${PYRET_PATH}/src/js/base`
+    'pyret-base': `${PYRET_PATH}/build/phaseC`,
   }
 });
-R(["pyret-base/js/pyret-tokenizer", "fs",], function(T, fs) {
+R(["pyret-base/js/pyret-tokenizer", "pyret-base/js/pyret-parser", "fs"], function(T, G, fs) {
   var input = fs.readFileSync(0).toString();
-  var t = T.Tokenizer;
-  t.tokenizeFrom(input);
+  var toks = T.Tokenizer;
+  toks.tokenizeFrom(input);
 
   var tokens = [];
-  while (t.hasNext()) {
-    tokens.push(t.next());
+  while (toks.hasNext()) {
+    tokens.push(toks.next());
   }
 
   var cleaned_tokens = tokens.map((tok) => {

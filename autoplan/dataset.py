@@ -113,7 +113,7 @@ def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None
 
 
 def build_prelabeled_dataset(label_set, programs, labels, tokenizer):
-    tokens, token_to_index, token_indices = tokenizer.tokenize_all(programs)
+    tokens, token_to_index, token_indices, programs = tokenizer.tokenize_all(programs)
     vocab_size = len(token_to_index)
 
     label_list = list(label_set)

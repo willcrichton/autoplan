@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 
 class ProgramEncoder(nn.Module):
-    def __init__(self, dataset, device, embedding_size=300, hidden_size=256, num_layers=1):
+    def __init__(self, dataset, device, model=nn.RNN, embedding_size=300, hidden_size=256, num_layers=1):
         super().__init__()
 
         # Setup various constants
@@ -13,12 +13,13 @@ class ProgramEncoder(nn.Module):
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+
         # Define graph architecture
         self.embedding = nn.Embedding(dataset.vocab_size, self.embedding_size)
-        self.rnn = nn.RNN(input_size=self.embedding_size,
-                          hidden_size=self.hidden_size,
-                          num_layers=self.num_layers,
-                          batch_first=True)
+        self.rnn = model(input_size=self.embedding_size,
+                         hidden_size=self.hidden_size,
+                         num_layers=self.num_layers,
+                         batch_first=True)
 
         # Put graph onto appropriate device
         self.to(device=device)
@@ -36,7 +37,8 @@ class ProgramEncoder(nn.Module):
                                                       enforce_sorted=False)
 
         # Initialize the hidden layer with random values
-        h0 = torch.empty(self.num_layers, batch_size, self.hidden_size).to(device=self.device)
+        h0 = torch.empty(self.num_layers, batch_size, self.hidden_size) \
+                  .to(device=self.device)
         nn.init.xavier_normal_(h0)
 
         # Run the RNN on all sequences
@@ -52,6 +54,7 @@ class ProgramClassifier(nn.Module):
         self.num_labels = len(dataset.label_set)
         self.encoder = ProgramEncoder(dataset, device, **kwargs)
         self.classifier = nn.Linear(self.encoder.hidden_size, self.num_labels)
+
         self.to(device=device)
 
     def forward(self, program, program_len):
@@ -72,10 +75,8 @@ class NeuralParser(nn.Module):
         name_order = sorted(dataset.choices.keys(), key=lambda name: self.choice_indices[name])
 
         # Inputs
-        self.encoder = ProgramEncoder(dataset, device, embedding_size, hidden_size)
-        self.index_embedding = nn.Embedding(
-            num_embeddings=len(dataset.choices),
-            embedding_dim=self.embedding_size)
+        self.encoder = ProgramEncoder(dataset, device, embedding_size=embedding_size, hidden_size=hidden_size)
+        self.index_embedding = nn.Embedding(len(dataset.choices), self.embedding_size)
         self.choice_embedding = nn.ModuleList([
             nn.Embedding(len(dataset.choices[name]), self.embedding_size)
             for name in name_order
@@ -86,6 +87,7 @@ class NeuralParser(nn.Module):
             input_size=self.encoder.hidden_size + self.embedding_size * 2,
             hidden_size=self.hidden_size)
         self.dropout_layer = nn.Dropout(p=hidden_dropout)
+        self.batchnorm_layer = nn.BatchNorm1d(self.hidden_size)
 
         # RV prediction
         self.inference = nn.ModuleList([
@@ -111,8 +113,9 @@ class NeuralParser(nn.Module):
 
         input_emb = torch.cat((choice_emb, program_emb, index_emb), dim=1)
 
-        h_dp = self.dropout_layer(h)
-        h = self.rnn(input_emb, h_dp)
+        h = self.batchnorm_layer(h)
+        h = self.dropout_layer(h)
+        h = self.rnn(input_emb, h)
         pred = [
             self.inference[cur_choice[i]](h[i, :])
             for i in range(len(cur_choice))

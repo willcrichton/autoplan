@@ -7,6 +7,10 @@ from sklearn.metrics import confusion_matrix
 from dataclasses import dataclass
 from typing import List
 import numpy as np
+from tqdm import tqdm
+import itertools
+from collections import ChainMap
+
 
 @dataclass
 class ClassEvaluation:
@@ -23,7 +27,7 @@ class ClassEvaluation:
             accuracy=(true == pred).sum() / len(true),
             classes=classes)
 
-    def plot_cm(self, ax=None, title='Confusion matrix', normalize=True):
+    def plot_cm(self, title, ax=None, normalize=True):
         from .vis import plot_cm
         import matplotlib.pyplot as plt
         return plot_cm(plt.gca() if ax is None else ax,
@@ -38,6 +42,39 @@ class BaseTrainer:
         self.model.train()
         return train_eval, val_eval
 
+    def train(self, epochs, progress=True):
+        iterator = tqdm(range(epochs)) if progress else range(epochs)
+        losses = []
+        train_eval = []
+        val_eval = []
+
+        for _ in iterator:
+            loss = self.train_one_epoch()
+            losses.append(loss)
+            train, val = self.eval()
+            train_eval.append(train)
+            val_eval.append(val)
+
+        return losses, train_eval, val_eval
+
+    @classmethod
+    def crossval(cls, dataset, k, epochs, *args, **kwargs):
+        all_eval = {
+            'accuracy': [],
+            'train_eval': [],
+            'val_eval': [],
+            'loss': []
+        }
+
+        for fold in tqdm(range(k)):
+            trainer = cls(dataset, *args, **kwargs)
+            loss, train_eval, val_eval = trainer.train(epochs, progress=False)
+            all_eval['accuracy'].append(max([eval_.accuracy for eval_ in val_eval]))
+            all_eval['train_eval'].append(train_eval)
+            all_eval['val_eval'].append(val_eval)
+            all_eval['loss'].append(loss)
+
+        return all_eval
 
 class ClassifierTrainer(BaseTrainer):
     def __init__(self, dataset, device=None, batch_size=100, val_frac=0.2, model_opts={}):
@@ -54,6 +91,7 @@ class ClassifierTrainer(BaseTrainer):
         self.optimizer = optim.Adam(self.model.parameters())
 
         # Convert datasets into data loaders to fetch batches of sequences
+        self.dataset = dataset
         self.train_loader, self.val_loader = dataset.split_train_val(val_frac)
 
         self.class_names = [str(cls).split('.')[1] for cls in dataset.label_set]
@@ -94,11 +132,11 @@ class ClassifierTrainer(BaseTrainer):
 
 
 class ParserTrainer(BaseTrainer):
-    def __init__(self, dataset, device=None, batch_size=100, model_params={}):
-        self.model = NeuralParser(dataset, device, **model_params)
+    def __init__(self, dataset, device=None, batch_size=100, model_opts={}):
+        self.model = NeuralParser(dataset, device, **model_opts)
         self.train_loader, self.val_loader = dataset.split_train_val()
         self.optimizer = optim.Adam(self.model.parameters())
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.loss_fn = nn.CrossEntropyLoss(reduction='sum')
         self.dataset = dataset
         self.label_names = {
             k: [self._truncate(str(name)) for _, name in dataset.choices[k]]
@@ -122,6 +160,7 @@ class ParserTrainer(BaseTrainer):
             loss = 0
             for i in range(len(preds)):
                 for t in range(len(preds[i])):
+                    # [t+1] for start token
                     loss += self.loss_fn(
                         preds[i][t].unsqueeze(0).cpu(),
                         batch['choices'][i][t+1].unsqueeze(0).cpu())
@@ -140,6 +179,7 @@ class ParserTrainer(BaseTrainer):
             pred_choices = self.model.predict(
                 batch['program'], batch['program_len'], batch['trace'], batch['trace_len'], batch['choices'])
             for (trace, pred, true) in zip(batch['trace'], pred_choices, batch['choices']):
+                # [1:] for start token
                 for (choice_index, value_pred, value_true) in zip(trace[1:], pred, true[1:]):
                     choice_pred[choice_index.item()].append(value_pred.item())
                     choice_true[choice_index.item()].append(value_true.item())
@@ -150,3 +190,13 @@ class ParserTrainer(BaseTrainer):
                 choice_true[i], choice_pred[i], self.label_names[index_to_name[i]])
             for i in choice_true.keys()
         }
+
+
+def option_combinations(options):
+    return [
+        dict(ChainMap(*opts))
+        for opts in itertools.product(*[
+                [{k: v} for v in vs]
+                for (k, vs) in options
+        ])
+    ]
