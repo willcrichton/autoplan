@@ -94,11 +94,11 @@ class ClassifierTrainer(BaseTrainer):
 
 
 class ParserTrainer(BaseTrainer):
-    def __init__(self, dataset, device=None, batch_size=100, model_params={}):
-        self.model = NeuralParser(dataset, device, **model_params)
+    def __init__(self, dataset, device=None, batch_size=100, model_opts={}):
+        self.model = NeuralParser(dataset, device, **model_opts)
         self.train_loader, self.val_loader = dataset.split_train_val()
         self.optimizer = optim.Adam(self.model.parameters())
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.loss_fn = nn.CrossEntropyLoss(reduction='sum')
         self.dataset = dataset
         self.label_names = {
             k: [self._truncate(str(name)) for _, name in dataset.choices[k]]
@@ -122,6 +122,7 @@ class ParserTrainer(BaseTrainer):
             loss = 0
             for i in range(len(preds)):
                 for t in range(len(preds[i])):
+                    # [t+1] for start token
                     loss += self.loss_fn(
                         preds[i][t].unsqueeze(0).cpu(),
                         batch['choices'][i][t+1].unsqueeze(0).cpu())
@@ -140,6 +141,7 @@ class ParserTrainer(BaseTrainer):
             pred_choices = self.model.predict(
                 batch['program'], batch['program_len'], batch['trace'], batch['trace_len'], batch['choices'])
             for (trace, pred, true) in zip(batch['trace'], pred_choices, batch['choices']):
+                # [1:] for start token
                 for (choice_index, value_pred, value_true) in zip(trace[1:], pred, true[1:]):
                     choice_pred[choice_index.item()].append(value_pred.item())
                     choice_true[choice_index.item()].append(value_true.item())
