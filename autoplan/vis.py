@@ -4,8 +4,17 @@ import math
 import numpy as np
 import pandas as pd
 
-def plot_accuracy(evals, ax=None):
-    return pd.Series([e.accuracy for e in evals]).plot(ax=ax)
+def plot_loss(loss, **kwargs):
+    ax = pd.Series(loss).plot(**kwargs)
+    ax.set_xlabel('Epoch')
+    ax.set_ylabel('Loss')
+    return ax
+
+def plot_accuracy(evals, **kwargs):
+    ax = pd.Series([e.accuracy for e in evals]).plot(**kwargs)
+    ax.set_xlabel('Epoch')
+    ax.set_ylabel('Accuracy')
+    return ax
 
 def plot_cm(ax, name, cm, classes, normalize=True):
     if normalize:

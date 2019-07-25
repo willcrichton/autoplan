@@ -17,7 +17,8 @@ class TokenType(Enum):
 
 
 class Tokenizer:
-    def __init__(self, exclude=[TokenType.String], preprocess=True):
+    def __init__(self, exclude=[TokenType.String, TokenType.Number, TokenType.Identifier],
+                 preprocess=True):
         self.exclude = exclude
         self.preprocess = preprocess
 
@@ -38,8 +39,11 @@ class Tokenizer:
         return map(exclude, tokens), program
 
     def tokenize_all(self, program_strings, vocab_index=None):
+        def map_tokenize(s):
+            tokens, program = self.tokenize(s)
+            return list(tokens), program
         tokens, programs = unzip(
-            par_for(lambda s: list(self.tokenize(s)), program_strings, progress=False))
+            par_for(map_tokenize, program_strings, progress=False))
 
         if vocab_index is None:
             token_to_index = {}
@@ -80,12 +84,13 @@ class Tokenizer:
             # if stderr != '':
             #     raise TokenizerError(program_string, stderr)
 
-        stdout, stderr = self._call_process(dir_name, 'tokenize.sh', program_string)
+        token_json, stderr = self._call_process(dir_name, 'tokenize.sh', program_string)
+        token_json = token_json.replace("\\", "\\\\")
 
         try:
-            return json.loads(stdout), program_string
+            return json.loads(token_json), program_string
         except json.JSONDecodeError:
-            raise TokenizerError(stdout, stderr)
+            raise TokenizerError(token_json, stderr)
 
 
 class JavaTokenizer(Tokenizer):

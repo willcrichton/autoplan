@@ -23,7 +23,7 @@ class ClassEvaluation:
             accuracy=(true == pred).sum() / len(true),
             classes=classes)
 
-    def plot_cm(self, ax=None, title='Confusion matrix', normalize=True):
+    def plot_cm(self, title, ax=None, normalize=True):
         from .vis import plot_cm
         import matplotlib.pyplot as plt
         return plot_cm(plt.gca() if ax is None else ax,
