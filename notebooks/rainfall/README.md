@@ -8,10 +8,12 @@ Our goal is to implement a model that, given a student solution, can classify it
 
 ## Dataset
 
-The dataset consists of around 400 solutions to the Rainfall problem in a variety of functional languages (OCaml, Pyret, and Racket), and about one-third are labeled with their plan.
+The dataset consists of around 400 solutions to the Rainfall problem in a variety of functional languages (OCaml, Pyret, and Racket), and about half are labeled with their plan.
 
 ![](dataset.png)
 
 ## Experiments
+
+At a high level, our approach is to apply the various methods described in the ["Generative Grading"](http://arxiv.org/abs/1905.09916) paper, starting with the simplest approach and increasing in complexity based on what works.
 
 * [Simple classifier trained on labeled student data](supervised_simple_classifier.ipynb)
