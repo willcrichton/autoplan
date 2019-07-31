@@ -4,27 +4,226 @@ from .labels import GeneralRainfallLabels
 Labels = GeneralRainfallLabels
 
 class CleanFirst(Rule):
-    raise NotImplementedError
+    def render(self):
+        recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
+        parameter_specs = self.choice('parameter_specs', {'list_name_only' : 1, 'list_name_and_type' : 1})
+        list_name = self.choice('list_name', {'alon': 1, 'aloi': 1, 'alod' : 1, 'alof' : 1, 'amounts' : 1})
+        _type = self.choice('_type', {'int': 1, 'float': 1})
+        helper_name = self.choice('helper_name', {'rain_helper' : 1, '_rainfall' : 1, 'rains' : 1, 'get_data' : 1})
+        helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
+        head = self.choice('head', {'head' : 1, 'hd' : 1}) 
+        tail = self.choice('tail', {'tail' : 1, 'tl' : 1, '_' : 1})
+
+        template = '''
+{%- set params -%}
+    {%- if parameter_specs == 'list_name_only' -%}
+        {{list_name}} = 
+    {%- else -%}
+        ({{list_name}} : {{_type}} list) : {{_type}} =
+    {%- endif -%}
+{%- endset -%}
+
+{%- set helper_body -%}
+let {{recursion}} {{helper_name}} ({{list_name}} : {{_type}} list) : {{_type}} list =
+    match {{list_name}} with
+    | [] -> []
+    | {{head}} :: {{tail}} -> if {{head}} = -999 then []
+    | {{head}} :: {{tail}} -> if {{head}} < 0 then {{helper_name}} {{tail}}
+        else when {{head}} >= 0 then {{head}} :: {{addition_helper_name}} {{tail}};;
+{%- endset -%}
+
+{%- set rainfall_body -%} {# ADD: failwith "No rain was collected" #}
+    if (List.length ({{helper_name}} {{list_name}}) = 0) then 0 else
+    (List.fold_right (+) {{helper_name}} {{list_name}} 0) / List.length ({{helper_name}} {{list_name}});;
+{%- endset -%}
+
+{%- if not helper_in_body -%}
+    {{helper_body}}
+{%- endif -%}
+
+let {{recursion}} rainfall {{params}}
+    {%- if helper_in_body -%} {# helper body + rainfall body #}
+    {{helper_body}} in 
+    {{rainfall_body}}
+    {% else -%} {# rainfall body for out of body helpers #}
+    {{rainfall_body}}
+    {% endif -%}     
+'''
+        params = '''
+        '''
+        helper_body = '''
+        '''
+        rainfall_body = '''
+        '''
+
+        return self.format(template, 
+            recursion=recursion,
+            parameter_specs=parameter_specs,
+            list_name=list_name,
+            _type=type, helper_in_body=helper_in_body,
+            params=params, head=head, tail=tail,
+            helper_name=helper_name,)
 
 class CleanInSC(Rule):
-    raise NotImplementedError
+    def render(self):
+        recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
+        parameter_specs = self.choice('parameter_specs', {'list_name_only' : 1, 'list_name_and_type' : 1})
+        _type = self.choice('_type', {'int': 1, 'float': 1})
+        list_name = self.choice('list_name', {'alor': 1, 'alon': 1, 'aloi': 1})
+        addition_helper_name = self.choice('addition_helper_name', {'rainfall_sum' : 1, 'sumfall' : 1, 'rainfall_sum_helper' : 1, 'sum' : 1, 'valid_values_sum' : 1, 'rainfall_helper' : 1, 'sumlist' : 1, 'nume' : 1})
+        counter_helper_name = self.choice('counter_helper_name', {'rainfall_count' : 1, 'poscount' : 1, 'rainfall_length_helper' : 1, 'count' : 1, 'valid_list_length' : 1, 'counter' : 1, 'selector' : 1, 'denom' : 1})
+        fail_message = self.choice('fail_message', {'\"invalid input (ocaml needed this wildcard for some reason)\"' : 1, '\"The list does not have final value -999\"' : 1, '\"No data of interest\"' : 1, '\"Please input a list with at least one non-negative value before the first instance of -999.\"' : 1})
+        head = self.choice('head', {'head' : 1, 'hd' : 1}) 
+        tail = self.choice('tail', {'tail' : 1, 'tl' : 1, '_' : 1})
+        separate_sentinel_check = self.choice('separate_sentinel_check', {True: 1, False : 1})
+        check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
+        helpers_in_body = self.choice('helpers_in_body', {True: 1, False: 1})
+        anonymous_helpers = self.choice('anonymous_helpers', {True: 1, False: 1})
+        raises_failwith = self.choice('raises_failwith', {True : 1, False : 1})
+
+        template = '''
+{%- set dot -%}
+    {%- if _type == 'int' -%} {# empty string #}
+    {%- else -%}
+        .
+    {%- endif -%}
+{%- endset -%}
+
+{%- set params -%}
+    {%- if parameter_specs == 'list_name_only' -%}
+        {{list_name}} = 
+    {%- else -%}
+        ({{list_name}} : {{_type}} list) : {{_type}} =
+    {%- endif -%}
+{%- endset -%}
+
+{%- set rainfall_body -%}
+    {%- if not check_div_by_zero -%}
+        ({{addition_helper_name}} {{list_name}}) /{{dot}} ({{counter_helper_name}} {{list_name}});;
+    {%- else -%}
+        if {{counter_helper_name}} = 0{{dot}} then 0{{dot}} else 
+        ({{addition_helper_name}} {{list_name}}) /{{dot}} ({{counter_helper_name}} {{list_name}});;
+        
+        {# TODO: Consider adding this optional syntax: 
+        (rainfall_sum_helper alon) / (if ( 0 <= (rainfall_length_helper alon)) 
+            then (rainfall_length_helper alon)  
+            else failwith "cannot divide by zero!");;
+        #}
+    {%- endif -%}
+{%- endset -%}
+
+{%- set failure -%}
+    {%- if raises_failwith -%}
+        failwith {{fail_message}}
+    {%- else -%}
+        0{{dot}}
+    {%- endif -%}
+{%- endset -%}
+
+{%- set addition_helper -%}
+let {{recursion}} {{addition_helper_name}} {{params}}
+    match {{list_name}} with
+    | [] -> {{failure}}
+    {% if separate_sentinel_check -%}
+    | -999 :: {{tail}} -> {{failure}}
+    | {{head}} :: {{tail}} -> if {{head}} < 0 then {{addition_helper_name}} {{tail}}
+        else when {{head}} >= 0 then {{head}} +{{dot}} {{addition_helper_name}} {{tail}};;
+    {% else -%}
+    | {{head}} :: {{tail}} -> if {{head}} = -999{{dot}} then {{failure}}
+        else {{head}} +{{dot}} {{counter_helper_name}} {{tail}};;
+    {% endif -%}
+{%- endset -%}
+
+{%- set counter_helper -%}
+let {{recursion}} {{counter_helper_name}} {{params}}
+    match {{list_name}} with
+    | [] -> {{failure}}
+    {%- if separate_sentinel_check -%}
+    | -999 :: {{tail}} -> {{failure}}
+    | {{head}} :: {{tail}} -> if {{head}} < 0 then {{counter_helper_name}} {{tail}}
+        else when {{head}} >= 0 then 1 +{{dot}} {{counter_helper_name}} {{tail}};;
+    {%- else -%}
+    | {{head}} :: {{tail}} -> if {{head}} = -999{{dot}} then {{failure}}
+        else 1 +{{dot}} {{counter_helper_name}} {{tail}};;
+    {%- endif -%}
+{%- endset -%}
+
+{% if not anonymous_helpers and not helpers_in_body -%}
+{{addition_helper}}
+{{counter_helper}} \n
+{% endif -%}
+
+let {{recursion}} rainfall {{params}}
+    {% if not anonymous_helpers and helpers_in_body -%}
+    {{addition_helper}}  
+    in {{counter_helper}} 
+
+    {# TODO: Consider adding these structures: 
+    in match alon with
+    | [] -> failwith "The list does not have final value -999" 
+    | hd::tl -> if hd=(-999)
+        then 0 
+        else(rainfall_helper alon) / (counter alon);; #} 
+
+    {# in sumlist (selector alon)) / (let l = (List.length (selector alon)) in
+                                (if l = 0 then failwith "No data of interest"
+                                 else l))));; #} 
+
+    {% elif anonymous_helpers -%} 
+    // anonymous_helpers // {# TODO: anonymous helpers in body, file: 73.ml #} 
+    {% endif -%}
+
+    {% if not anonymous_helpers and not helpers_in_body -%}
+    {{rainfall_body}}
+    {% endif -%}
+'''
+        dot = '''
+        '''
+        params = '''
+        '''
+        rainfall_body = '''
+        '''
+        failure = '''
+        '''
+        counter_helper = '''
+        '''
+        addition_helper = '''
+        '''
+
+        return self.format(template, 
+            recursion=recursion,
+            parameter_specs=parameter_specs,
+            _type=_type, list_name=list_name,
+            addition_helper_name=addition_helper_name,
+            counter_helper_name=counter_helper_name,
+            check_div_by_zero=check_div_by_zero,
+            helpers_in_body=helpers_in_body,
+            anonymous_helpers=anonymous_helpers,
+            dot=dot, params=params,
+            rainfall_body=rainfall_body,
+            raises_failwith=raises_failwith,
+            fail_message=fail_message, 
+            head=head, tail=tail, failure=failure,
+            separate_sentinel_check=separate_sentinel_check,
+            counter_helper=counter_helper,
+            addition_helper=addition_helper)
 
 class SingleLoopHelper(Rule):
     def render(self):
-        _type = self.params['_type']
         recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
         list_name = self.choice('list_name', {'alon2': 1, 'lon': 1})
         fail_message = self.choice('fail_message', {'\"No data input.\"' : 1, '\"No rainfall\"' : 1})
         head = self.choice('head', {'head' : 1, 'hd' : 1}) 
         tail = self.choice('tail', {'tail' : 1, 'tl' : 1, '_' : 1})
-        div_by_zero = self.choice('div_by_zero', {True: 1, False: 1})
+        parameter_specs = self.choice('parameter_specs', {'vars_only': 1, 'vars_and_type': 1})
+        if_statement = self.choice('if_statement', {'if' : 1, 'when' : 1}) 
+        then_statement = self.choice('then_statement', {'then' : 1, '->' : 1}) 
+        check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
         gt_zero = self.choice('gt_zero', {True : 1, False : 1}) # Else student uses '= 0'
         raises_failwith = self.choice('raises_failwith', {True : 1, False : 1})
         separate_sentinel_check = self.choice('separate_sentinel_check', {True: 1, False : 1})
         recurse_empty_list = self.choice('recurse_empty_list', {True: 1, False : 1})
         check_positive_head = self.choice('check_positive_head', {True: 1, False : 1})
-        if_statement = self.choice('if_statement', {'if' : 1, 'when' : 1}) 
-        then_statement = self.choice('then_statement', {'then' : 1, '->' : 1}) 
 
         template = '''
 {%- set average -%}
@@ -39,16 +238,12 @@ class SingleLoopHelper(Rule):
     {%- if raises_failwith -%}
         failwith {{fail_message}}
     {%- else -%}
-        {%- if _type == 'int' -%} 
-            0
-        {%- else -%} 
-            0.
-        {%- endif -%}
+        0{{dot}}
     {%- endif -%}
 {%- endset -%}
 
 {%- set return_average -%}
-    {%- if div_by_zero -%} 
+    {%- if check_div_by_zero -%} 
         {%- if gt_zero -%}
             if {{counter}} > 0 then {{average}} else {{failure}}
         {%- else -%} 
@@ -83,16 +278,26 @@ class SingleLoopHelper(Rule):
     {%- endif -%}
 {%- endset -%}
 
-let {{recursion}} {{helper_name}} ({{list_name}} : {{_type}} list) ({{addition}} : {{_type}}) ({{counter}} : {{_type}}) : {{_type}} =
+{%- set params -%}
+    {%- if parameter_specs == 'vars_only' -%}
+        {{list_name}} {{addition}} {{counter}} = 
+    {%- else -%} {# 'vars_and_type' #}
+        ({{list_name}} : {{_type}} list) ({{addition}} : {{_type}}) ({{counter}} : {{_type}})  : {{_type}} =
+    {% endif %} 
+{%- endset -%}
+
+let {{recursion}} {{helper_name}} {{params}}
     match {{list_name}} with
     | [] -> {{return_average}}
     | {{head}} :: {{tail}} -> {{end_recursion}}
     | {{head}} :: {{tail}} -> {{recurse}}
 
-{# TODO:
-# {{EXTRA_PARAMS}} #}
+{# TODO: Consider adding more options in the helper body, 
+using separate_sentinel_check. #}
 '''
 
+        params = '''
+        '''
         return_average = '''
         '''
         average = '''
@@ -112,10 +317,10 @@ let {{recursion}} {{helper_name}} ({{list_name}} : {{_type}} list) ({{addition}}
             helper_name=self.params['helper_name'], 
             _type=self.params['_type'],
             dot=self.params['dot'],
-            average=average, 
-            failure=self.params['failure'], 
             addition=self.params['addition'], 
             counter=self.params['counter'],
+            failure=failure, 
+            average=average, 
             fail_message=fail_message,
             raises_failwith=raises_failwith,
             return_average=return_average,
@@ -125,13 +330,14 @@ let {{recursion}} {{helper_name}} ({{list_name}} : {{_type}} list) ({{addition}}
             list_name=list_name,
             head=head,
             tail=tail,
-            div_by_zero=div_by_zero,
+            check_div_by_zero=check_div_by_zero,
             gt_zero=gt_zero,
             separate_sentinel_check=separate_sentinel_check,
             recurse_empty_list=recurse_empty_list,
             check_positive_head=check_positive_head,
             if_statement=if_statement,
-            then_statement=then_statement)
+            then_statement=then_statement,
+            params=params)
 
 
 class SingleLoop(Rule):
@@ -196,11 +402,21 @@ class SingleLoop(Rule):
 
 let {{recursion}} rainfall {{params}}
     {% if helper_in_body -%}
-        {{helper_body}} in 
-        {{helper_name}} {{list_name}} 0{{dot}} 0{{dot}};;
+        {{helper_body}} 
+        in {{helper_name}} {{list_name}} 0{{dot}} 0{{dot}};;
     {% else -%} 
         {{rainfall_body}}
     {% endif -%}
+
+{# TODO: Consider adding these possibilities in the end line of the in-body helper:
+
+a) in (let (x, inc) = rainfall_helper alon in (if inc = 0
+                                              then failwith "failed to find valid measurements" 
+                                              else x /. (float inc))) ;;
+
+b) in match sum_helper alof 0. 0. with
+    | (s, c) -> (s /. c) ;; 
+#}
 '''
 
         dot = '''
@@ -230,22 +446,22 @@ let {{recursion}} rainfall {{params}}
             raises_failwith=raises_failwith,
             parameter_specs=parameter_specs,
             rainfall_body_specs=rainfall_body_specs, 
-            helper_body=SingleLoopHelper(helper_name=helper_name, _type=_type, dot=dot,
-                                        failure=failure, addition=addition, counter=counter).render())
+            helper_body=SingleLoopHelper(helper_name=helper_name, _type=_type, dot=dot, 
+                addition=addition, counter=counter).render())
 
 class Program(Rule):
     def render(self):
         strategy = self.choice('strategy', {
-            Labels.SingleLoop: 1
+            # Labels.SingleLoop: 1,
             Labels.CleanFirst: 1,
-            Labels.CleanInSC: 1,
+            Labels.CleanInSC: 1
         })
 
         self.set_label(int(strategy))
 
-        if strategy == Labels.SingleLoop:
-            return SingleLoop().render()
-        elif strategy == Labels.CleanFirst:
+        # if strategy == Labels.SingleLoop:
+        #     return SingleLoop().render()
+        if strategy == Labels.CleanFirst:
             return CleanFirst().render()
         elif strategy == Labels.CleanInSC:
             return CleanInSC().render()
