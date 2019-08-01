@@ -16,4 +16,5 @@ The dataset consists of around 400 solutions to the Rainfall problem in a variet
 
 At a high level, our approach is to apply the various methods described in the ["Generative Grading"](http://arxiv.org/abs/1905.09916) paper, starting with the simplest approach and increasing in complexity based on what works.
 
-* [Simple classifier trained on labeled student data](supervised_simple_classifier.ipynb)
+1. [Simple classifier trained on labeled student data](supervised_simple_classifier.ipynb)
+2. [Simple classifier ablation](supervised_simple_classifier_ablation.ipynb)
