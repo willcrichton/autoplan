@@ -66,7 +66,7 @@ class BaseTrainer:
             'loss': []
         }
 
-        for fold in tqdm(range(k)):
+        for fold in range(k):
             trainer = cls(dataset, *args, **kwargs)
             loss, train_eval, val_eval = trainer.train(epochs, progress=False)
             all_eval['accuracy'].append(max([eval_.accuracy for eval_ in val_eval]))

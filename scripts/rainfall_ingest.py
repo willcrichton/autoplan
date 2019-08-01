@@ -6,7 +6,7 @@ from autoplan.token import OCamlTokenizer, PyretTokenizer, TokenizerError
 
 from grammars.rainfall.labels import GeneralRainfallLabels, DetailedRainfallLabels
 
-REPO_DIR = os.path.expanduser('~/Code/autoplan')
+REPO_DIR = os.path.expanduser('~/autoplan')
 DATA_DIR = f'{REPO_DIR}/data/rainfall/raw'
 CODE_DIR = f'{DATA_DIR}/Fall2013-RawData'
 
@@ -62,6 +62,8 @@ def ingest_dataset(name, **kwargs):
 
         programs.append(src)
         labels.append(general_label)
+
+    assert len(programs) > 0
 
     return build_prelabeled_dataset(GeneralRainfallLabels, programs, labels, tokenizer)
 

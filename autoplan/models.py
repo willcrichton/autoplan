@@ -42,7 +42,13 @@ class ProgramEncoder(nn.Module):
         nn.init.xavier_normal_(h0)
 
         # Run the RNN on all sequences
-        _, hidden = self.rnn(packed_input, h0)
+        if isinstance(self.rnn, nn.LSTM):
+            cell_state = torch.empty(self.num_layers, batch_size, self.hidden_size) \
+                              .to(device=self.device)
+            nn.init.xavier_normal_(cell_state)
+            _, (hidden, _) = self.rnn(packed_input, (h0, cell_state))
+        else:
+            _, hidden = self.rnn(packed_input, h0)
 
         return hidden.squeeze(0)
 
