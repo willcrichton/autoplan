@@ -9,7 +9,7 @@ class SingleLoopHelper(Rule):
         sentinel_recurse = self.choice('sentinel_recurse', {True: 1, False: 1})
         gt_zero = self.choice('gt_zero', {True: 1, False: 1})
         template = '''
-{% if record_or_params == 'record' %}
+{%- if record_or_params == 'record' -%}
   fun helper(nums :: List<Number>) -> {sum : Number, length : Number}:
     cases(List<Number>) nums:
       | empty => {sum: 0, length: 0}
@@ -24,7 +24,7 @@ class SingleLoopHelper(Rule):
         end
     end
   end
-{% else %}
+{%- else -%}
   fun helper(nums :: List<Number>, sum :: Number, count :: Number) -> Number:
     cases(List<Number>) nums:
       | empty =>
@@ -35,11 +35,11 @@ class SingleLoopHelper(Rule):
          end
       | link(f, r) =>
         if f == -999:
-          {% if sentinel_recurse %}
+          {%- if sentinel_recurse -%}
           helper([], sum, count)
-          {% else %}
+          {%- else -%}
           sum / count
-          {% endif %}
+          {%- endif -%}
         else if f < 0:
           helper(r, sum, count)
         else:
@@ -47,7 +47,7 @@ class SingleLoopHelper(Rule):
         end
     end
   end
-{% endif %}
+{%- endif -%}
         '''
         return self.format(
             template,
@@ -61,28 +61,28 @@ class SingleLoop(Rule):
         helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
         error_strategy = self.choice('error_strategy', {'exception': 1, 'zero': 1})
         template = '''
-{% set return_logic %}
+{%- set return_logic -%}
   vals = helper(nums)
   if vals.length == 0:
-    {% if error_strategy == 'exception' %}
+    {%- if error_strategy == 'exception' -%}
     raise("error")
-    {% else %}
+    {%- else -%}
     0
-    {% endif %}
+    {%- endif -%}
   else:
     vals.sum / vals.length
-{% endset %}
-{% if helper_in_body %}
+{%- endset -%}
+{%- if helper_in_body -%}
 fun rainfall(nums :: List<Number>) -> Number:
   {{ helper }}
   {{ return_logic }}
 end
-{% else %}
+{%- else -%}
 fun rainfall(nums :: List<Number>) -> Number:
   {{ return_logic }}
 end
 {{ helper }}
-{% endif %}
+{%- endif -%}
         '''
         return_logic = '''
         '''
@@ -133,39 +133,39 @@ class CleanFirst(Rule):
         checks_length = self.choice('checks_length', {True: 1, False: 1})
 
         template = '''
-{% set return_logic %}
+{%- set return_logic -%}
   nums = helper(nums)
-  {% if inline_average %}
+  {%- if inline_average -%}
   {{ list_sum }} / nums.length()
-  {% else %}
+  {%- else -%}
   sum = {{ list_sum }}
   sum / nums.length()
-  {% endif %}
-{% endset %}
+  {%- endif -%}
+{%- endset -%}
 
-{% set body %}
-  {% if checks_length %}
+{%- set body -%}
+  {%- if checks_length -%}
   case(List) nums:
   | empty => 0
   | link(_,_) =>
      {{ return_logic }}
-  {% else %}
+  {%- else -%}
   {{ return_logic }}
-  {% endif %}
-{% endset %}
+  {%- endif -%}
+{%- endset -%}
 
-{% if helper_in_body %}
+{%- if helper_in_body -%}
 fun rainfall(nums :: List<Number>) -> Number:
   {{ helper }}
   {{ body }}
 end
-{% else %}
+{%- else -%}
 fun rainfall(nums :: List<Number>) -> Number:
   {{ body }}
 end
 
 {{ helper }}
-{% endif %}
+{%- endif -%}
         '''
 
         return self.format(
@@ -181,12 +181,12 @@ class SCHelper(Rule):
         sc_helper_style = self.choice('sc_helper_style', {'case': 1, 'if': 1})
 
         template = '''
-{% set rec_expr %}
-  {% if sum %} f + {% else %} 1 + {% endif %} helper(r)
-{% endset %}
+{%- set rec_expr -%}
+  {%- if sum -%} f + {%- else -%} 1 + {%- endif -%} helper(r)
+{%- endset -%}
 
 fun helper(nums :: List<Number>) -> Number:
-  {% if sc_helper_style == 'case' %}
+  {%- if sc_helper_style == 'case' -%}
   cases(List) nums:
     | empty => 0
     | link(f, r) =>
@@ -197,7 +197,7 @@ fun helper(nums :: List<Number>) -> Number:
       else:
         {{ rec_expr }}
       end
-  {% else %}
+  {%- else -%}
   if is-empty(nums):
     0
   else if nums.first == -999:
@@ -207,7 +207,7 @@ fun helper(nums :: List<Number>) -> Number:
   else:
     {{ rec_expr }}
   end
-  {% endif %}
+  {%- endif -%}
 '''
         return self.format(
             template,
@@ -220,7 +220,7 @@ class CleanInSC(Rule):
         helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
 
         template = '''
-{% set return_logic %}
+{%- set return_logic -%}
   c = count(nums)
   s = sum(nums)
   if c > 0:
@@ -228,21 +228,21 @@ class CleanInSC(Rule):
   else:
     0
   end
-{% endset %}
-{% if helper_in_body %}
+{%- endset -%}
+{%- if helper_in_body -%}
 fun rainfall(nums :: List<Number>) -> Number:
   {{ sum_helper }}
   {{ count_helper }}
   {{ return_logic }}
 end
-{% else %}
+{%- else -%}
 fun rainfall(nums :: List<Number>) -> Number:
   {{ return_logic }}
 end
 
 {{ sum_helper }}
 {{ count_helper }}
-{% endif %}
+{%- endif -%}
         '''
 
         return self.format(
