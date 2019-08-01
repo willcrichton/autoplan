@@ -452,15 +452,15 @@ b) in match sum_helper alof 0. 0. with
 class Program(Rule):
     def render(self):
         strategy = self.choice('strategy', {
-            # Labels.SingleLoop: 1,
+            Labels.SingleLoop: 1,
             Labels.CleanFirst: 1,
             Labels.CleanInSC: 1
         })
 
         self.set_label(int(strategy))
 
-        # if strategy == Labels.SingleLoop:
-        #     return SingleLoop().render()
+        if strategy == Labels.SingleLoop:
+            return SingleLoop().render()
         if strategy == Labels.CleanFirst:
             return CleanFirst().render()
         elif strategy == Labels.CleanInSC:
