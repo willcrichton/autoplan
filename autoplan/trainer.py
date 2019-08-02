@@ -85,7 +85,7 @@ class ClassifierTrainer(BaseTrainer):
 
         # If our classes are imbalanced, then the weights on the loss encourage the network
         # to not just predict the class balance after training.
-        self.loss_fn = nn.CrossEntropyLoss(weight=1/train_dataset.class_balance)
+        self.loss_fn = nn.CrossEntropyLoss(weight=1/dataset.class_balance)
 
         # Optimizer modulates how fast the network learns during training
         self.optimizer = optim.Adam(self.model.parameters())
@@ -103,7 +103,7 @@ class ClassifierTrainer(BaseTrainer):
 
             # Get the predicted labels for the current batch
             pred_score = self.model.forward(program=batch['program'].to(device=self.device),
-                                    program_len=batch['program_len'])
+                                            program_len=batch['program_len'])
 
             # Compute the difference between the predict labels and the true labels
             loss = self.loss_fn(pred_score.cpu(), batch['labels'])
