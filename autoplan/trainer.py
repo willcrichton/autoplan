@@ -97,7 +97,7 @@ class ClassifierTrainer(BaseTrainer):
 
     def train_one_epoch(self):
         total_loss = 0
-        # for batch in self.train_loader:
+        for batch in self.train_loader:
             # Reset all gradients
             self.optimizer.zero_grad()
 
@@ -149,7 +149,7 @@ class ParserTrainer(BaseTrainer):
 
     def train_one_epoch(self):
         total_loss = 0
-        # for batch in self.train_loader:
+        for batch in self.train_loader:
             self.optimizer.zero_grad()
 
             preds = self.model.forward(
