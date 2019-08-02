@@ -93,7 +93,6 @@ class ClassifierTrainer(BaseTrainer):
         # Convert datasets into data loaders to fetch batches of sequences
         self.dataset = dataset
         self.train_loader, self.val_loader = dataset.split_train_val(val_frac)
-
         self.class_names = [str(cls).split('.')[1] for cls in dataset.label_set]
 
     def train_one_epoch(self):
@@ -104,7 +103,7 @@ class ClassifierTrainer(BaseTrainer):
 
             # Get the predicted labels for the current batch
             pred_score = self.model.forward(program=batch['program'].to(device=self.device),
-                                    program_len=batch['program_len'])
+                                            program_len=batch['program_len'])
 
             # Compute the difference between the predict labels and the true labels
             loss = self.loss_fn(pred_score.cpu(), batch['labels'])
@@ -128,7 +127,6 @@ class ClassifierTrainer(BaseTrainer):
             true.extend(batch['labels'])
             pred.extend(self.predict(batch['program'], batch['program_len']).tolist())
         return ClassEvaluation.from_preds(true, pred, self.class_names)
-
 
 
 class ParserTrainer(BaseTrainer):
