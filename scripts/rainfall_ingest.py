@@ -24,15 +24,36 @@ def read_and_join_coding(name):
     return combined_entries
 
 
+def pyret_source_filter(src):
+    src = src.replace('[', '[list:')
+    src = src.replace(';', ' end')
+    src = src.replace(' : Number', ' :: Number') #hack
+    src = src.replace('= fun', '= lam')
+    src = src.replace(' (nums', '(nums')
+    src = src.replace(' (my-nums', '(my-nums')
+    src = src.replace('fun(', 'lam(')
+    src = src.replace('fun (', 'lam(')
+    src = src.replace('f<0', 'f < 0') #hack
+    src = src.replace('f>0', 'f > 0') #hack
+    for tok in ['==', '/', '+', '*', '=>', '<>']:
+        src = src.replace(tok, f' {tok} ')
+    src = src.replace('not (', 'not(')
+    src = src.replace('"', '```')
+    src = src.replace('check:', 'where:')
+    return src
+
+
 dataset_config = {
     'T1': {
         'path': lambda id: f'{CODE_DIR}/T1/{id}.ml',
-        'tokenizer': OCamlTokenizer
+        'tokenizer': OCamlTokenizer,
+        'source_filter': lambda src: src
     },
     'T1Acc': {
         'path': lambda id:
         f'{CODE_DIR}/T1Acc/{id}/cs019-2013-rainfall/rainfall-program.current.arr',
-        'tokenizer': PyretTokenizer
+        'tokenizer': PyretTokenizer,
+        'source_filter': pyret_source_filter
     }
 }
 
@@ -44,27 +65,45 @@ def ingest_dataset(name, **kwargs):
 
     programs = []
     labels = []
+    skipped = 0
     for _, entry in codes.iterrows():
         path = config['path'](entry.ID)
         try:
             src = open(path).read()
         except FileNotFoundError:
+            skipped += 1
             continue
 
-        general_label = GeneralRainfallLabels.from_string(entry['Gen Category'].strip())
-        detailed_label = DetailedRainfallLabels.from_string(entry['Detail Category'].strip())
+        src = config['source_filter'](src)
 
         try:
-            tokens, _ = tokenizer.tokenize(src)
-            list(tokens)
-        except TokenizerError as e:
+            general_label = GeneralRainfallLabels.from_string(entry['Gen Category'].strip())
+            detailed_label = DetailedRainfallLabels.from_string(entry['Detail Category'].strip())
+        except Exception:
+            skipped += 1
             continue
 
+
+        print(src)
+        print('*'*10)
+        try:
+            tokens, prog = tokenizer.tokenize(src)
+            print(prog)
+            list(tokens)
+        except TokenizerError as e:
+            lines = src.split('\n')
+            # print('\n'.join([f'{i:02d}: {l}' for i, l in zip(range(1, len(lines)+1), lines)]))
+            # print(e.args[1])
+            skipped += 1
+            continue
+        print('='*30)
         programs.append(src)
+
         labels.append(general_label)
 
     assert len(programs) > 0
 
+    print('Skipped {} programs'.format(skipped))
     return build_prelabeled_dataset(GeneralRainfallLabels, programs, labels, tokenizer)
 
 

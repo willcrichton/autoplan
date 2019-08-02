@@ -1,3 +1,3 @@
 #!/bin/bash
 set -e
-node main.js
+node tokenize.js
