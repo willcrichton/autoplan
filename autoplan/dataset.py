@@ -10,8 +10,6 @@ from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 import pickle
 
-from pprint import pprint
-
 
 @dataclass
 class BaseDataset:
@@ -84,14 +82,6 @@ def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None
     # Grammar parser
     print('Tokenizing programs...')
     tokens, token_to_index, token_indices, *_ = tokenizer.tokenize_all(programs, vocab_index)
-    
-    for _ in range(10):
-        print(_)
-        print("program:", programs[_])
-        print("tokens:", tokens[_])
-        print("choices:",choices[_])
-        print("options:",choice_options[_])
-        print("-----\n")
 
     vocab_size = len(token_to_index)
 
