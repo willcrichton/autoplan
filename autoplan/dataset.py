@@ -50,10 +50,10 @@ class BaseDataset:
             for name_index, value_index in zip(item['trace'], item['choices'])
         ]
 
-    def split_train_val(self, val_frac=0.2):
+    def split_train_val(self, val_frac=0.33):
         N = len(self.dataset)
         val_size = int(N * val_frac)
-        return tuple(map(lambda ds: self.loader(ds),
+        return tuple(map(lambda ds: (ds, self.loader(ds)),
                          random_split(self.dataset, [N - val_size, val_size])))
 
     def save(self, path):
