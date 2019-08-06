@@ -10,6 +10,7 @@ from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 import pickle
 
+from pprint import pprint
 
 @dataclass
 class BaseDataset:
@@ -74,14 +75,33 @@ class PrelabeledDataset(BaseDataset):
     pass
 
 
-def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None):
+def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None, unique=False):
     print('Generating programs...')
-    programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N)])
-    print('Generated {} unique programs.'.format(len(set(programs))))
+
+    if unique:
+        unique_programs = set()
+        choices = []
+        choice_options = []
+        labels = []
+
+        while len(unique_programs) < N:
+            program, choice, choice_option, label = unzip([generator.generate()])
+            
+            if (program[0] not in unique_programs):
+                unique_programs = unique_programs.union(program)
+                choices.extend(choice)
+                choice_options.extend(choice_option)
+                labels.extend(label)
+    
+        programs = list(unique_programs)
+        print('Generated {} unique programs.'.format(len(programs)))
+    else:
+        programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N)])
+        print('Generated {} unique programs.'.format(len(set(programs))))
 
     # Grammar parser
     print('Tokenizing programs...')
-    tokens, token_to_index, token_indices, *_ = tokenizer.tokenize_all(programs, vocab_index)
+    tokens, token_to_index, token_indices, programs = tokenizer.tokenize_all(programs, vocab_index)
 
     vocab_size = len(token_to_index)
 
