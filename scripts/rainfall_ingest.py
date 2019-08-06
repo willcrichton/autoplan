@@ -65,6 +65,7 @@ def ingest_dataset(name, **kwargs):
 
     programs = []
     labels = []
+    plancodes = []
     skipped = 0
     for _, entry in codes.iterrows():
         path = config['path'](entry.ID)
@@ -83,12 +84,8 @@ def ingest_dataset(name, **kwargs):
             skipped += 1
             continue
 
-
-        print(src)
-        print('*'*10)
         try:
             tokens, prog = tokenizer.tokenize(src)
-            print(prog)
             list(tokens)
         except TokenizerError as e:
             lines = src.split('\n')
@@ -96,15 +93,15 @@ def ingest_dataset(name, **kwargs):
             # print(e.args[1])
             skipped += 1
             continue
-        print('='*30)
-        programs.append(src)
 
+        programs.append(src)
+        plancodes.append(entry.Form)
         labels.append(general_label)
 
     assert len(programs) > 0
 
     print('Skipped {} programs'.format(skipped))
-    return build_prelabeled_dataset(GeneralRainfallLabels, programs, labels, tokenizer)
+    return build_prelabeled_dataset(GeneralRainfallLabels, programs, labels, plancodes, tokenizer)
 
 
 if __name__ == "__main__":

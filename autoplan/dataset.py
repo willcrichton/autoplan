@@ -111,7 +111,7 @@ def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None
         choice_indices=choice_indices)
 
 
-def build_prelabeled_dataset(label_set, programs, labels, tokenizer):
+def build_prelabeled_dataset(label_set, programs, labels, codes, tokenizer):
     tokens, token_to_index, token_indices, programs = tokenizer.tokenize_all(programs)
     vocab_size = len(token_to_index)
 
@@ -124,7 +124,7 @@ def build_prelabeled_dataset(label_set, programs, labels, tokenizer):
     class_balance = torch.tensor([class_hist[lbl] / sum(class_hist.values()) for lbl in label_list])
 
     return PrelabeledDataset(
-        dataset=ProgramDataset(programs, token_indices, program_labels),
+        dataset=ProgramDataset(programs, token_indices, program_labels, codes=codes),
         vocab_size=vocab_size,
         vocab_index=token_to_index,
         label_set=label_list,
@@ -132,7 +132,7 @@ def build_prelabeled_dataset(label_set, programs, labels, tokenizer):
 
 
 class ProgramDataset(TorchDataset):
-    def __init__(self, programs, token_indices, labels, choices=None, choice_index_map=None):
+    def __init__(self, programs, token_indices, labels, choices=None, choice_index_map=None, codes=None):
         self.items = [
             {
                 'source': programs[idx],
@@ -162,6 +162,13 @@ class ProgramDataset(TorchDataset):
                 }}
                 for idx in range(len(token_indices))
             ]
+
+        if codes is not None:
+            self.items = [
+                {**self.items[idx], 'code': codes[idx]}
+                for idx in range(len(token_indices))
+            ]
+
 
     def __len__(self):
         return len(self.items)
