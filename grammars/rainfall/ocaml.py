@@ -23,14 +23,14 @@ class CleanFirst(Rule):
 let {{recursion}} helper_name (list_name : {{_type}} list) : {{_type}} list =
     match list_name with
     | [] -> []
-    | head :: tail -> if head = -999 then []
-    | head :: tail -> if head < 0 then helper_name tail
-        else when head >= 0 then head :: {{addition_helper_name}} tail;;
-{%- endset -%}
+    | head :: tail when head = -999 -> []
+    | head :: tail when head < 0{{dot}} -> helper_name tail
+    | head :: tail when head >= 0{{dot}} -> head :: addition_helper_name tail 
+{% endset -%}
 
 {%- set rainfall_body -%} {# ADD: failwith "No rain was collected" #}
-    if (List.length (helper_name list_name) = 0) then 0 else
-    (List.fold_right (+) helper_name list_name 0) / List.length (helper_name list_name);;
+    if (List.length (helper_name list_name) = 0{{dot}}) then 0{{dot}} else
+    (List.fold_right (+) helper_name list_name 0{{dot}}) /{{dot}} List.length (helper_name list_name)
 {%- endset -%}
 
 {%- if not helper_in_body -%}
@@ -49,7 +49,8 @@ let {{recursion}} rainfall {{params}}
         return self.format(template, 
             recursion=recursion,
             uses_annotation=uses_annotation,
-            _type=type, helper_in_body=helper_in_body)
+            _type=_type, helper_in_body=helper_in_body,
+            dot='' if _type == 'int' else '.')
 
 class CleanInSC(Rule):
     def render(self):
@@ -73,26 +74,26 @@ class CleanInSC(Rule):
     {%- endif -%}
 {%- endset -%}
 
-{%- set rainfall_body -%}
-    {%- if not check_div_by_zero -%}
-        (addition_helper_name list_name) /{{dot}} (counter_helper_name list_name);;
-    {%- else -%}
-        {%- if check_counter_val -%}
-        if counter_helper_name = 0{{dot}} then {{failure}} else 
-        (addition_helper_name list_name) /{{dot}} (counter_helper_name list_name);;
-        {%- else -%}
-        (addition_helper_name list_name) / (if (0{{dot}} <= (counter_helper_name list_name)) 
-            then (counter_helper_name list_name)  
-            else {{failure}});;
-        {%- endif -%}
-    {%- endif -%}
-{%- endset -%}
-
 {%- set failure -%}
     {%- if raises_failwith -%}
         failwith {{fail_message}}
     {%- else -%}
         0{{dot}}
+    {%- endif -%}
+{%- endset -%}
+
+{%- set rainfall_body -%}
+    {%- if not check_div_by_zero -%}
+        (addition_helper_name list_name) /{{dot}} (counter_helper_name list_name)
+    {%- else -%}
+        {%- if check_counter_val -%}
+        if counter_helper_name = 0{{dot}} then {{failure}} else 
+        (addition_helper_name list_name) /{{dot}} (counter_helper_name list_name)
+        {%- else -%}
+        (addition_helper_name list_name) /{{dot}} (if (0{{dot}} <= (counter_helper_name list_name)) 
+            then (counter_helper_name list_name)  
+            else {{failure}})
+        {%- endif -%}
     {%- endif -%}
 {%- endset -%}
 
@@ -102,11 +103,11 @@ let {{recursion}} addition_helper_name {{params}}
     | [] -> {{failure}}
     {% if separate_sentinel_check -%}
     | -999 :: tail -> {{failure}}
-    | head :: tail -> if head < 0 then addition_helper_name tail
-        else when head >= 0 then head +{{dot}} addition_helper_name tail;;
+    | head :: tail -> if head < 0{{dot}} then addition_helper_name tail
+        else head +{{dot}} addition_helper_name tail 
     {% else -%}
     | head :: tail -> if head = -999{{dot}} then {{failure}}
-        else head +{{dot}} counter_helper_name tail;;
+        else head +{{dot}} counter_helper_name tail
     {% endif -%}
 {%- endset -%}
 
@@ -116,11 +117,11 @@ let {{recursion}} counter_helper_name {{params}}
     | [] -> {{failure}}
     {%- if separate_sentinel_check -%}
     | -999 :: tail -> {{failure}}
-    | head :: tail -> if head < 0 then counter_helper_name tail
-        else when head >= 0 then 1 +{{dot}} counter_helper_name tail;;
+    | head :: tail -> if head < 0{{dot}} then counter_helper_name tail
+        else 1 +{{dot}} counter_helper_name tail 
     {%- else -%}
     | head :: tail -> if head = -999{{dot}} then {{failure}}
-        else 1 +{{dot}} counter_helper_name tail;;
+        else 1 +{{dot}} counter_helper_name tail
     {%- endif -%}
 {%- endset -%}
 
@@ -139,7 +140,7 @@ let {{recursion}} rainfall {{params}}
     (try ((List.fold_right 
     (fun var var -> (if (var = (-999)) then 0{{dot}} else if (var < 0) then var else (var + var))) list_name 0) /{{dot}} (List.fold_right 
         (fun var var -> (if (var = (-999)) then 0{{dot}} else if (var < 0) then var else (1 + var))) list_name 0)) with division_by_zero_helper_name 
-        -> {{failure}});;
+        -> {{failure}})
     {% endif -%}
 
     {% if not anonymous_helpers and not helpers_in_body -%}
@@ -165,8 +166,7 @@ class SingleLoopHelper(Rule):
         recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
         fail_message = self.choice('fail_message', {'\"No data input.\"' : 1, '\"No rainfall\"' : 1})
         uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
-        if_statement = self.choice('if_statement', {'if' : 1, 'when' : 1}) 
-        then_statement = self.choice('then_statement', {'then' : 1, '->' : 1}) 
+        # if_statement = self.choice('if_statement', {'if' : 1, 'when' : 1}) 
         check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
         gt_zero = self.choice('gt_zero', {True : 1, False : 1}) # Else student uses '= 0'
         raises_failwith = self.choice('raises_failwith', {True : 1, False : 1})
@@ -194,9 +194,9 @@ class SingleLoopHelper(Rule):
 {%- set return_average -%}
     {%- if check_div_by_zero -%} 
         {%- if gt_zero -%}
-            if counter_var > 0 then {{average}} else {{failure}}
+            if counter_var > 0{{dot}} then {{average}} else {{failure}}
         {%- else -%} 
-            if counter_var = 0 then {{failure}} else {{average}}
+            if counter_var = 0{{dot}} then {{failure}} else {{average}}
         {%- endif -%}
     {%- else -%} 
         {{average}}
@@ -205,9 +205,9 @@ class SingleLoopHelper(Rule):
 
 {%- set end_recursion -%}
     {%- if recurse_empty_list -%}
-        helper_name [] addition_var counter_var
+        -> helper_name [] addition_var counter_var
     {%- else -%}
-        {{if_statement}} head = -999 {{then_statement}} {{return_average}}
+        when head = -999 -> {{return_average}}
     {%- endif -%}
 {%- endset -%}
 
@@ -221,7 +221,7 @@ class SingleLoopHelper(Rule):
 
 {%- set recurse -%}
     {%- if check_positive_head -%}
-        {{if_statement}} head >= 0 {{then_statement}} {{include_head}} else {{exclude_head}}
+        if head >= 0{{dot}} then {{include_head}} else {{exclude_head}}
     {%- else -%}
         {{include_head}}
     {%- endif -%}
@@ -238,7 +238,7 @@ class SingleLoopHelper(Rule):
 let {{recursion}} helper_name {{params}}
     match list_name with
     | [] -> {{return_average}}
-    | head :: tail -> {{end_recursion}}
+    | head :: tail {{end_recursion}}
     | head :: tail -> {{recurse}}
 
 {# TODO: Consider adding more options in the helper body, 
@@ -254,8 +254,6 @@ using separate_sentinel_check. #}
             separate_sentinel_check=separate_sentinel_check,
             recurse_empty_list=recurse_empty_list,
             check_positive_head=check_positive_head,
-            if_statement=if_statement,
-            then_statement=then_statement,
             uses_annotation=uses_annotation,
             dot='' if _type == 'int' else '.')
 
@@ -291,22 +289,24 @@ class SingleLoop(Rule):
 
 {%- set rainfall_body -%}
     {%- if rainfall_body_specs == 'direct_pass' -%}
-        helper_name list_name 0{{dot}} 0{{dot}};;
+        helper_name list_name 0{{dot}} 0{{dot}}
     {%- elif recursion_strategy == 'match' -%} {# recurse #}
+        match list_name with
         | {{check_empty_list}} -> {{failure}}
-        | _ -> helper_name list_name 0{{dot}} 0{{dot}};;
+        | _ -> helper_name list_name 0{{dot}} 0{{dot}}
     {%- elif recursion_strategy == 'let' -%}
         let (addition_var, counter_var) = helper_name list_name 0{{dot}} 0{{dot}} in 
         if counter_var = 0{{dot}} then failwith {{fail_message}}
-        else (addition_var /{{dot}} counter_var);;
+        else (addition_var /{{dot}} counter_var)
     {%- else -%}
+        match list_name with
         | {{check_empty_list}} -> {{failure}}
         | (addition_var, counter_var) -> addition_var /{{dot}} counter_var
     {%- endif -%}
 {%- endset -%}
 
 {%- if not helper_in_body -%}
-    {{helper_body}};;
+    {{helper_body}}
 {%- endif %}
 
 let {{recursion}} rainfall {{params}}
