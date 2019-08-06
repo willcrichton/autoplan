@@ -79,21 +79,20 @@ def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None
     print('Generating programs...')
 
     if unique:
-        unique_programs = set()
+        programs = []
         choices = []
         choice_options = []
         labels = []
 
-        while len(unique_programs) < N:
+        while len(programs) < N:
             program, choice, choice_option, label = unzip([generator.generate()])
             
-            if (program[0] not in unique_programs):
-                unique_programs = unique_programs.union(program)
+            if (program[0] not in programs):
+                programs.extend(program)
                 choices.extend(choice)
                 choice_options.extend(choice_option)
                 labels.extend(label)
     
-        programs = list(unique_programs)
         print('Generated {} unique programs.'.format(len(programs)))
     else:
         programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N)])
