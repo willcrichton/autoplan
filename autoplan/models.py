@@ -67,7 +67,7 @@ class ProgramClassifier(nn.Module):
         hidden = self.encoder(program, program_len)
 
         # Run the classifier on the hidden state to predict the final class
-        return self.classifier(hidden)
+        return self.classifier(hidden).squeeze(0)
 
 
 class NeuralParser(nn.Module):
