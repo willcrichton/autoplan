@@ -7,7 +7,7 @@ from sklearn.metrics import confusion_matrix
 from dataclasses import dataclass
 from typing import List
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import itertools
 from collections import ChainMap
 
@@ -17,6 +17,8 @@ class ClassEvaluation:
     confusion_matrix: List[List[int]]
     classes: List[str]
     accuracy: float
+    true: List[int]
+    pred: List[int]
 
     @classmethod
     def from_preds(cls, true, pred, classes):
@@ -24,14 +26,28 @@ class ClassEvaluation:
         pred = np.array(pred)
         return cls(
             confusion_matrix=confusion_matrix(true, pred),
+            true=true,
+            pred=pred,
             accuracy=(true == pred).sum() / len(true),
             classes=classes)
+
+    def incorrect(self):
+        wrong = self.true != self.pred
+        return wrong.nonzero()[0]
 
     def plot_cm(self, title, ax=None, normalize=True):
         from .vis import plot_cm
         import matplotlib.pyplot as plt
         return plot_cm(plt.gca() if ax is None else ax,
                        title, self.confusion_matrix, self.classes, normalize)
+
+    def print_incorrect(self, dataset, labels):
+        idxs = self.incorrect()
+        for idx in idxs:
+            print(dataset[idx]['source'])
+            print('Pred: {}\nTrue: {}'.format(
+                str(labels(self.pred[idx])), str(labels(self.true[idx]))))
+            print('='*30 + '\n')
 
 
 class BaseTrainer:
@@ -58,7 +74,7 @@ class BaseTrainer:
         return losses, train_eval, val_eval
 
     @classmethod
-    def crossval(cls, dataset, k, epochs, *args, **kwargs):
+    def crossval(cls, dataset, k, epochs, *args, progress=False, **kwargs):
         all_eval = {
             'accuracy': [],
             'train_eval': [],
@@ -66,7 +82,8 @@ class BaseTrainer:
             'loss': []
         }
 
-        for fold in range(k):
+        it = tqdm(range(k)) if progress else range(k)
+        for fold in it:
             trainer = cls(dataset, *args, **kwargs)
             loss, train_eval, val_eval = trainer.train(epochs, progress=False)
             all_eval['accuracy'].append(max([eval_.accuracy for eval_ in val_eval]))
@@ -77,7 +94,7 @@ class BaseTrainer:
         return all_eval
 
 class ClassifierTrainer(BaseTrainer):
-    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.2, model_opts={}):
+    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.33, model_opts={}):
         self.device = device if device is not None else torch.device('cpu')
 
         # Create model from provided class
@@ -92,7 +109,8 @@ class ClassifierTrainer(BaseTrainer):
 
         # Convert datasets into data loaders to fetch batches of sequences
         self.dataset = dataset
-        self.train_loader, self.val_loader = dataset.split_train_val(val_frac)
+        (self.train_dataset, self.train_loader), \
+            (self.val_dataset, self.val_loader) = dataset.split_train_val(val_frac)
         self.class_names = [str(cls).split('.')[1] for cls in dataset.label_set]
 
     def train_one_epoch(self):

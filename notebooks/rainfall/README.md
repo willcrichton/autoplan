@@ -18,3 +18,4 @@ At a high level, our approach is to apply the various methods described in the [
 
 1. [Simple classifier trained on labeled student data](supervised_simple_classifier.ipynb)
 2. [Simple classifier ablation](supervised_simple_classifier_ablation.ipynb)
+3. [Simple classifier trained on synthetic data](supervised_grammar_classifier.ipynb)

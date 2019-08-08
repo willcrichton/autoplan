@@ -4,7 +4,7 @@ import os
 import json
 from iterextras import par_for, unzip
 from enum import Enum
-
+import re
 
 class TokenizerError(Exception):
     pass
@@ -77,12 +77,12 @@ class Tokenizer:
         stdout, stderr = p.communicate(input=input.encode())
         return stdout.decode('utf-8'), stderr.decode('utf-8')
 
-    def _call_tokenizer_process(self, program_string, dir_name):
+    def _call_tokenizer_process(self, program_string, dir_name, check_stderr=True):
         if self.preprocess:
             program_string, stderr = self._call_process(dir_name, 'preprocess.sh',
                                                         program_string)
-            # if stderr != '':
-            #     raise TokenizerError(program_string, stderr)
+            if check_stderr and stderr != '':
+                raise TokenizerError(program_string, stderr)
 
         token_json, stderr = self._call_process(dir_name, 'tokenize.sh', program_string)
         token_json = token_json.replace("\\", "\\\\")
@@ -116,7 +116,7 @@ class OCamlTokenizer(Tokenizer):
         }
 
     def _tokenize(self, program_string):
-        tokens, program = self._call_tokenizer_process(program_string, 'ocaml')
+        tokens, program = self._call_tokenizer_process(program_string, 'ocaml', check_stderr=False)
         return map(tuple, tokens), program
 
 
@@ -130,5 +130,9 @@ class PyretTokenizer(Tokenizer):
         }
 
     def _tokenize(self, program_string):
-        tokens, program = self._call_tokenizer_process(program_string, 'pyret/main.sh')
+        if self.preprocess:
+            program_string = re.sub(r'where:.*?end', 'end', program_string, flags=re.DOTALL)
+
+        tokens, program = self._call_tokenizer_process(program_string, 'pyret')
+
         return map(tuple, tokens), program
