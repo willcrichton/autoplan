@@ -118,7 +118,7 @@ class ClassifierTrainer(BaseTrainer):
     def predict(self, program, program_len):
         pred_label = self.model(program=program.to(device=self.device),
                                 program_len=program_len)
-        return pred_label.topk(1, dim=1)[1].squeeze().cpu()
+        return pred_label.topk(1, dim=1)[1].squeeze(-1).cpu()
 
     def eval_on(self, loader):
         true = []
