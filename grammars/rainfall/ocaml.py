@@ -296,7 +296,7 @@ class SingleLoop(Rule):
         | _ -> helper_name list_name 0{{dot}} 0{{dot}}
     {%- elif recursion_strategy == 'let' -%}
         let (addition_var, counter_var) = helper_name list_name 0{{dot}} 0{{dot}} in 
-        if counter_var = 0{{dot}} then failwith {{fail_message}}
+        if counter_var = 0{{dot}} then {{failure}}
         else (addition_var /{{dot}} counter_var)
     {%- else -%}
         match list_name with
