@@ -1,4 +1,4 @@
-all: tokenize.native preprocess.native
+all: tokenize.native preprocess.native ast.native
 
 %.native: %.ml
 	ocamlbuild -use-ocamlfind $*.native
