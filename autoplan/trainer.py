@@ -74,7 +74,7 @@ class BaseTrainer:
         return losses, train_eval, val_eval
 
     @classmethod
-    def crossval(cls, dataset, epochs, *args, progress=False, **kwargs):
+    def crossval(cls, dataset, k, epochs, *args, progress=False, **kwargs):
         all_eval = {
             'accuracy': [],
             'train_eval': [],
@@ -82,12 +82,14 @@ class BaseTrainer:
             'loss': []
         }
 
-        trainer = cls(dataset, *args, **kwargs)
-        loss, train_eval, val_eval = trainer.train(epochs, progress=False)
-        all_eval['accuracy'].append(max([eval_.accuracy for eval_ in val_eval]))
-        all_eval['train_eval'].append(train_eval)
-        all_eval['val_eval'].append(val_eval)
-        all_eval['loss'].append(loss)
+        it = tqdm(range(k)) if progress else range(k)
+        for fold in it:
+            trainer = cls(dataset, *args, **kwargs)
+            loss, train_eval, val_eval = trainer.train(epochs, progress=False)
+            all_eval['accuracy'].append(max([eval_.accuracy for eval_ in val_eval]))
+            all_eval['train_eval'].append(train_eval)
+            all_eval['val_eval'].append(val_eval)
+            all_eval['loss'].append(loss)
 
         return all_eval
 
