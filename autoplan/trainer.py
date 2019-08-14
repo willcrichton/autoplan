@@ -94,7 +94,7 @@ class BaseTrainer:
         return all_eval
 
 class ClassifierTrainer(BaseTrainer):
-    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.33, model_opts={}):
+    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.33, split=None, model_opts={}):
         self.device = device if device is not None else torch.device('cpu')
 
         # Create model from provided class
@@ -110,7 +110,7 @@ class ClassifierTrainer(BaseTrainer):
         # Convert datasets into data loaders to fetch batches of sequences
         self.dataset = dataset
         (self.train_dataset, self.train_loader), \
-            (self.val_dataset, self.val_loader) = dataset.split_train_val(val_frac)
+            (self.val_dataset, self.val_loader) = split.set_train_val(val_frac)
         self.class_names = [str(cls).split('.')[1] for cls in dataset.label_set]
 
     def train_one_epoch(self):
@@ -136,7 +136,7 @@ class ClassifierTrainer(BaseTrainer):
     def predict(self, program, program_len):
         pred_label = self.model(program=program.to(device=self.device),
                                 program_len=program_len)
-        return pred_label.topk(1, dim=1)[1].squeeze().cpu()
+        return pred_label.topk(1, dim=1)[1].squeeze(-1).cpu()
 
     def eval_on(self, loader):
         true = []

@@ -52,12 +52,6 @@ class BaseDataset:
             for name_index, value_index in zip(item['trace'], item['choices'])
         ]
 
-    def split_train_val(self, val_frac=0.33):
-        N = len(self.dataset)
-        val_size = int(N * val_frac)
-        return tuple(map(lambda ds: (ds, self.loader(ds)),
-                         random_split(self.dataset, [N - val_size, val_size])))
-
     def save(self, path):
         pickle.dump(self, open(path, 'wb'))
 
@@ -70,9 +64,34 @@ class SyntheticDataset(BaseDataset):
     choices: Dict[str, List[Tuple[float, str]]]
     choice_indices: Dict[str, int]
 
+
 @dataclass
 class PrelabeledDataset(BaseDataset):
     pass
+
+class TrainValSplit:
+    def set_train_val(self, val_frac):
+        raise NotImplementedError
+
+@dataclass
+class RandomSplit(TrainValSplit):
+    dataset: TorchDataset
+
+    def set_train_val(self, val_frac=0.33):
+        N = len(self.dataset.dataset)
+        val_size = int(N * val_frac)
+        return tuple(map(lambda ds: (ds, self.dataset.loader(ds)),
+                         random_split(self.dataset.dataset, [N - val_size, val_size])))
+
+
+@dataclass
+class TrainVal(TrainValSplit):
+    dataset: TorchDataset
+    val_dataset: TorchDataset
+
+    def set_train_val(self, val_frac=None):
+        return (self.dataset.dataset, self.dataset.loader(self.dataset.dataset)), \
+                (self.val_dataset.dataset, self.val_dataset.loader(self.val_dataset.dataset))
 
 
 def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None, unique=False):
