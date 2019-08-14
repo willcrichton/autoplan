@@ -9,6 +9,8 @@ class CleanFirst(Rule):
         uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
         _type = self.choice('_type', {'int': 1, 'float': 1})
         helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
+        raises_failwith = self.choice('raises_failwith', {True: 1, False: 1})
+        fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1})
 
         template = '''
 {%- set params -%}
@@ -16,6 +18,14 @@ class CleanFirst(Rule):
         (list_name : {{_type}} list) : {{_type}} =
     {%- else -%}
         list_name = 
+    {%- endif -%}
+{%- endset -%}
+
+{%- set failure -%}
+    {%- if raises_failwith -%}
+        failwith {{fail_message}}
+    {%- else -%}
+        0{{dot}}
     {%- endif -%}
 {%- endset -%}
 
@@ -28,8 +38,8 @@ let {{recursion}} helper_name (list_name : {{_type}} list) : {{_type}} list =
     | head :: tail when head >= 0{{dot}} -> head :: addition_helper_name tail 
 {% endset -%}
 
-{%- set rainfall_body -%} {# ADD: failwith "No rain was collected" #}
-    if (List.length (helper_name list_name) = 0{{dot}}) then 0{{dot}} else
+{%- set rainfall_body -%} 
+    if (List.length (helper_name list_name) = 0{{dot}}) then {{failure}} else
     (List.fold_right (+) helper_name list_name 0{{dot}}) /{{dot}} List.length (helper_name list_name)
 {%- endset -%}
 
@@ -50,6 +60,8 @@ let {{recursion}} rainfall {{params}}
             recursion=recursion,
             uses_annotation=uses_annotation,
             _type=_type, helper_in_body=helper_in_body,
+            raises_failwith=raises_failwith,
+            fail_message=fail_message,
             dot='' if _type == 'int' else '.')
 
 class CleanInSC(Rule):
