@@ -150,8 +150,8 @@ let {{recursion}} rainfall {{params}}
 
     {% elif anonymous_helpers -%} {# File 73.ml #}
     (try ((List.fold_right 
-    (fun var var -> (if (var = (-999)) then 0{{dot}} else if (var < 0) then var else (var + var))) list_name 0) /{{dot}} (List.fold_right 
-        (fun var var -> (if (var = (-999)) then 0{{dot}} else if (var < 0) then var else (1 + var))) list_name 0)) with division_by_zero_helper_name 
+    (fun var var -> (if (var = (-999)) then {{failure}} else if (var < 0) then var else (var + var))) list_name 0) /{{dot}} (List.fold_right 
+        (fun var var -> (if (var = (-999)) then {{failure}} else if (var < 0) then var else (1 + var))) list_name 0)) with division_by_zero_helper_name 
         -> {{failure}})
     {% endif -%}
 
