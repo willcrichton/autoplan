@@ -84,7 +84,7 @@ class BaseTrainer:
 
         it = tqdm(range(k)) if progress else range(k)
         for fold in it:
-            crossval_helper(all_eval, dataset, epochs, *args, **kwargs)
+            csl.crossval_helper(all_eval, dataset, epochs, *args, **kwargs)
         return all_eval
 
 
