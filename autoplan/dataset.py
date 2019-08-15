@@ -9,6 +9,7 @@ from typing import List, Dict, Tuple
 from torch.utils.data.dataloader import default_collate
 import torch.nn.functional as F
 import pickle
+import numpy as np
 
 from pprint import pprint
 
@@ -95,8 +96,6 @@ class TrainVal(TrainValSplit):
 
 
 def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None, unique=False):
-    print('Generating programs...')
-
     if unique:
         programs = []
         choices = []
@@ -105,25 +104,20 @@ def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None
 
         while len(programs) < N:
             program, choice, choice_option, label = unzip([generator.generate()])
-            
+
             if (program[0] not in programs):
                 programs.extend(program)
                 choices.extend(choice)
                 choice_options.extend(choice_option)
                 labels.extend(label)
-    
-        print('Generated {} unique programs.'.format(len(programs)))
     else:
         programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N)])
-        print('Generated {} unique programs.'.format(len(set(programs))))
 
     # Grammar parser
-    print('Tokenizing programs...')
     tokens, token_to_index, token_indices, programs = tokenizer.tokenize_all(programs, vocab_index)
 
     vocab_size = len(token_to_index)
 
-    print('Building dataset metadata...')
     all_choices = {}
     for opts in choice_options:
         all_choices = {**opts, **all_choices}
@@ -215,3 +209,8 @@ class ProgramDataset(TorchDataset):
 
     def __getitem__(self, idx):
         return self.items[idx]
+
+
+def set_random_seed(i=0):
+    torch.manual_seed(i)
+    np.random.seed(i)

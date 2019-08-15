@@ -92,6 +92,12 @@ class Tokenizer:
         except json.JSONDecodeError:
             raise TokenizerError(token_json, stderr)
 
+    def parse(self, program_string):
+        stdout, stderr = self._parse(program_string)
+        if stderr.strip() != '':
+            raise TokenizerError(program_string, stderr)
+        return json.loads(stdout)
+
 
 class JavaTokenizer(Tokenizer):
     def _token_types(self):
@@ -115,6 +121,9 @@ class OCamlTokenizer(Tokenizer):
             'STRING': TokenType.String
         }
 
+    def _parse(self, program_string):
+        return self._call_process('ocaml', 'ast.native', program_string)
+
     def _tokenize(self, program_string):
         tokens, program = self._call_tokenizer_process(program_string, 'ocaml', check_stderr=False)
         return map(tuple, tokens), program
@@ -136,3 +145,6 @@ class PyretTokenizer(Tokenizer):
         tokens, program = self._call_tokenizer_process(program_string, 'pyret')
 
         return map(tuple, tokens), program
+
+    def _parse(self, program_string):
+        return self._call_process('pyret', 'ast.sh', program_string)

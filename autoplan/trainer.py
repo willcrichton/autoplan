@@ -99,7 +99,8 @@ class BaseTrainer:
 
 
 class ClassifierTrainer(BaseTrainer):
-    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.33, split=None, model_opts={}):
+    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.33, split=None, model_opts={},
+                 optim_opts={}):
         self.device = device if device is not None else torch.device('cpu')
 
         # Create model from provided class
@@ -110,7 +111,7 @@ class ClassifierTrainer(BaseTrainer):
         self.loss_fn = nn.CrossEntropyLoss(weight=1/dataset.class_balance)
 
         # Optimizer modulates how fast the network learns during training
-        self.optimizer = optim.Adam(self.model.parameters())
+        self.optimizer = optim.Adam(self.model.parameters(), **optim_opts)
 
         # Convert datasets into data loaders to fetch batches of sequences
         self.dataset = dataset
