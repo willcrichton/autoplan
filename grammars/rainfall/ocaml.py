@@ -3,11 +3,17 @@ from .labels import GeneralRainfallLabels
 
 Labels = GeneralRainfallLabels
 
+# Files incorrectly classified: 77.ml, 4.ml, 96.ml, 113.ml
 class CleanFirst(Rule):
     def render(self):
         recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
-        uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
         _type = self.choice('_type', {'int': 1, 'float': 1})
+        
+        recursion_strategy = self.choice('recursion_strategy', {'if' : 1, 'when' : 1})
+        check_empty_list = self.choice('check_empty_list', {'[]' : 1, '[] | -999.' : 1, })
+        return_empty_list = self.choice('return_empty_list', {True: 1, False: 1})
+
+        uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
         helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
         raises_failwith = self.choice('raises_failwith', {True: 1, False: 1})
         fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1})
@@ -25,15 +31,31 @@ class CleanFirst(Rule):
     {%- if raises_failwith -%}
         failwith {{fail_message}}
     {%- else -%}
-        0{{dot}}
+        0{{dot}} 
+    {%- endif -%}
+{%- endset -%}
+
+{%- set end_recursion -%}
+    {%- if return_empty_list -%}
+        []
+    {%- else -%}
+        (List.fold_right (fun var var -> var +{{dot}} var) list_name 0{{dot}}) /{{dot}} float_of_int (List.length list_name)
+    {%- endif -%}
+{%- endset -%}
+
+{%- set recurse -%}
+    {%- if recursion_strategy == 'when' -%}
+        when (head = -999) -> {{end_recursion}}
+    {%- elif recursion_strategy == 'if' -%}
+        if head = -999 then {{end_recursion}} else if head < 0{{dot}} then helper_name tail else head :: (helper_name tail)
     {%- endif -%}
 {%- endset -%}
 
 {%- set helper_body -%}
 let {{recursion}} helper_name (list_name : {{_type}} list) : {{_type}} list =
     match list_name with
-    | [] -> []
-    | head :: tail when head = -999 -> []
+    | {{check_empty_list}} -> {{end_recursion}}
+    | head :: tail -> {{recurse}}
     | head :: tail when head < 0{{dot}} -> helper_name tail
     | head :: tail when head >= 0{{dot}} -> head :: addition_helper_name tail 
 {% endset -%}
@@ -53,7 +75,17 @@ let {{recursion}} rainfall {{params}}
     {{rainfall_body}}
     {% else -%} {# rainfall body for out of body helpers #}
     {{rainfall_body}}
-    {% endif -%}     
+    {% endif -%}   
+
+{# TODO: Consider adding these options to compute average:
+// in main
+addition_var /{{dot}} counter_var
+addition_var /{{dot}} (float_of_int (List.length list_name))
+(float_of_int (List.fold_right (+) list_name 0{{dot}})) /{{dot}} (float_of_int (List.length list_name))
+
+// in helper
+(List.fold_right (+) helper_name list_name 0{{dot}}) /{{dot}} List.length (helper_name list_name)
+addition_var (helper_name list_name) /{{dot}} counter_var}  #} 
 '''
 
         return self.format(template, 
@@ -62,6 +94,9 @@ let {{recursion}} rainfall {{params}}
             _type=_type, helper_in_body=helper_in_body,
             raises_failwith=raises_failwith,
             fail_message=fail_message,
+            check_empty_list=check_empty_list,
+            recursion_strategy=recursion_strategy,
+            return_empty_list=return_empty_list,
             dot='' if _type == 'int' else '.')
 
 class CleanInSC(Rule):
