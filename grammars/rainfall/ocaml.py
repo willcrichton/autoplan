@@ -9,7 +9,7 @@ class CleanFirst(Rule):
         recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
         _type = self.choice('_type', {'int': 1, 'float': 1})
         
-        recursion_strategy = self.choice('recursion_strategy', {'if' : 1, 'when' : 1})
+        strategy = self.choice('strategy', {'if' : 1, 'when' : 1})
         check_empty_list = self.choice('check_empty_list', {'[]' : 1, '[] | -999.' : 1, })
         return_empty_list = self.choice('return_empty_list', {True: 1, False: 1})
 
@@ -35,7 +35,7 @@ class CleanFirst(Rule):
     {%- endif -%}
 {%- endset -%}
 
-{%- set end_recursion -%}
+{%- set terminate -%}
     {%- if return_empty_list -%}
         []
     {%- else -%}
@@ -43,21 +43,20 @@ class CleanFirst(Rule):
     {%- endif -%}
 {%- endset -%}
 
-{%- set recurse -%}
-    {%- if recursion_strategy == 'when' -%}
-        when (head = -999) -> {{end_recursion}}
-    {%- elif recursion_strategy == 'if' -%}
-        if head = -999 then {{end_recursion}} else if head < 0{{dot}} then helper_name tail else head :: (helper_name tail)
-    {%- endif -%}
-{%- endset -%}
-
 {%- set helper_body -%}
 let {{recursion}} helper_name (list_name : {{_type}} list) : {{_type}} list =
     match list_name with
-    | {{check_empty_list}} -> {{end_recursion}}
-    | head :: tail -> {{recurse}}
+    | {{check_empty_list}} -> {{terminate}}
+    {%- if strategy == 'when' -%}
+    | head :: tail when head = -999 -> {{terminate}}
     | head :: tail when head < 0{{dot}} -> helper_name tail
-    | head :: tail when head >= 0{{dot}} -> head :: addition_helper_name tail 
+    | head :: tail when head >= 0{{dot}} -> head :: helper_name tail
+    {%- elif strategy == 'if' -%}
+    | head :: tail -> if head = -999 then {{terminate}} else if head < 0{{dot}} then helper_name tail else head :: (helper_name tail)
+    {%- elif strategy == 'match' -%}
+    | -999 -> {{terminate}}
+    | tail -> if head >= 0{{dot}} then helper_name tail else head :: (helper_name tail)
+    {%- endif -%}
 {% endset -%}
 
 {%- set rainfall_body -%} 
@@ -95,7 +94,7 @@ addition_var (helper_name list_name) /{{dot}} counter_var}  #}
             raises_failwith=raises_failwith,
             fail_message=fail_message,
             check_empty_list=check_empty_list,
-            recursion_strategy=recursion_strategy,
+            strategy=strategy,
             return_empty_list=return_empty_list,
             dot='' if _type == 'int' else '.')
 
