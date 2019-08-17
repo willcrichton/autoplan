@@ -9,14 +9,15 @@ class CleanFirst(Rule):
         recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
         _type = self.choice('_type', {'int': 1, 'float': 1})
         
-        strategy = self.choice('strategy', {'if' : 1, 'when' : 1})
-        check_empty_list = self.choice('check_empty_list', {'[]' : 1, '[] | -999.' : 1, })
+        average_strategy = self.choice('average_strategy', {'direct': 1, 'list_fold_right_helper' : 1, 'list_fold_right_anon' : 1})
+        main_strategy = self.choice('main_strategy', {'match' : 1, 'if' : 1, 'when' : 1})
+        check_empty_list = self.choice('check_empty_list', {'[]' : 1, '[] | -999' : 1, })
         return_empty_list = self.choice('return_empty_list', {True: 1, False: 1})
 
         uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
         helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
         raises_failwith = self.choice('raises_failwith', {True: 1, False: 1})
-        fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1})
+        fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1, '\"There are no positive rainfall values.\"' : 1, '\"No rainfall values found\"' : 1})
 
         template = '''
 {%- set params -%}
@@ -35,11 +36,21 @@ class CleanFirst(Rule):
     {%- endif -%}
 {%- endset -%}
 
+{%- set average -%}
+    {%- if average_strategy == 'direct' -%}
+        addition_var /{{dot}} counter_var
+    {%- elif average_strategy == 'list_fold_right_helper' -%}
+        (List.fold_right (+) helper_name list_name 0{{dot}}) /{{dot}} List.length (helper_name list_name)
+    {%- elif average_strategy == 'list_fold_right_anon' -%}
+        (List.fold_right (fun var var -> var +{{dot}} var) list_name 0{{dot}}) /{{dot}} float_of_int (List.length list_name)
+    {%- endif -%}
+{%- endset -%}
+
 {%- set terminate -%}
     {%- if return_empty_list -%}
         []
     {%- else -%}
-        (List.fold_right (fun var var -> var +{{dot}} var) list_name 0{{dot}}) /{{dot}} float_of_int (List.length list_name)
+        {{average}}
     {%- endif -%}
 {%- endset -%}
 
@@ -47,13 +58,13 @@ class CleanFirst(Rule):
 let {{recursion}} helper_name (list_name : {{_type}} list) : {{_type}} list =
     match list_name with
     | {{check_empty_list}} -> {{terminate}}
-    {%- if strategy == 'when' -%}
+    {%- if main_strategy == 'when' -%}
     | head :: tail when head = -999 -> {{terminate}}
     | head :: tail when head < 0{{dot}} -> helper_name tail
     | head :: tail when head >= 0{{dot}} -> head :: helper_name tail
-    {%- elif strategy == 'if' -%}
+    {%- elif main_strategy == 'if' -%}
     | head :: tail -> if head = -999 then {{terminate}} else if head < 0{{dot}} then helper_name tail else head :: (helper_name tail)
-    {%- elif strategy == 'match' -%}
+    {%- elif main_strategy == 'match' -%}
     | -999 -> {{terminate}}
     | tail -> if head >= 0{{dot}} then helper_name tail else head :: (helper_name tail)
     {%- endif -%}
@@ -61,7 +72,7 @@ let {{recursion}} helper_name (list_name : {{_type}} list) : {{_type}} list =
 
 {%- set rainfall_body -%} 
     if (List.length (helper_name list_name) = 0{{dot}}) then {{failure}} else
-    (List.fold_right (+) helper_name list_name 0{{dot}}) /{{dot}} List.length (helper_name list_name)
+    {{average}}
 {%- endset -%}
 
 {%- if not helper_in_body -%}
@@ -75,16 +86,6 @@ let {{recursion}} rainfall {{params}}
     {% else -%} {# rainfall body for out of body helpers #}
     {{rainfall_body}}
     {% endif -%}   
-
-{# TODO: Consider adding these options to compute average:
-// in main
-addition_var /{{dot}} counter_var
-addition_var /{{dot}} (float_of_int (List.length list_name))
-(float_of_int (List.fold_right (+) list_name 0{{dot}})) /{{dot}} (float_of_int (List.length list_name))
-
-// in helper
-(List.fold_right (+) helper_name list_name 0{{dot}}) /{{dot}} List.length (helper_name list_name)
-addition_var (helper_name list_name) /{{dot}} counter_var}  #} 
 '''
 
         return self.format(template, 
@@ -94,7 +95,7 @@ addition_var (helper_name list_name) /{{dot}} counter_var}  #}
             raises_failwith=raises_failwith,
             fail_message=fail_message,
             check_empty_list=check_empty_list,
-            strategy=strategy,
+            main_strategy=main_strategy,
             return_empty_list=return_empty_list,
             dot='' if _type == 'int' else '.')
 
