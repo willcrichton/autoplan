@@ -71,8 +71,7 @@ let {{recursion}} helper_name (list_name : {{_type}} list) : {{_type}} list =
 {% endset -%}
 
 {%- set rainfall_body -%} 
-    if (List.length (helper_name list_name) = 0{{dot}}) then {{failure}} else
-    {{average}}
+    if (List.length (helper_name list_name) = 0{{dot}}) then {{failure}} else {{average}}
 {%- endset -%}
 
 {%- if not helper_in_body -%}
