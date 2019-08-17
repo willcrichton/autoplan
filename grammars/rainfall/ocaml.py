@@ -28,14 +28,6 @@ class CleanFirst(Rule):
     {%- endif -%}
 {%- endset -%}
 
-{%- set failure -%}
-    {%- if raises_failwith -%}
-        failwith {{fail_message}}
-    {%- else -%}
-        0{{dot}} 
-    {%- endif -%}
-{%- endset -%}
-
 {%- set average -%}
     {%- if average_strategy == 'direct' -%}
         addition_var /{{dot}} counter_var
@@ -43,6 +35,14 @@ class CleanFirst(Rule):
         (List.fold_right (+) helper_name list_name 0{{dot}}) /{{dot}} List.length (helper_name list_name)
     {%- elif average_strategy == 'list_fold_right_anon' -%}
         (List.fold_right (fun var var -> var +{{dot}} var) list_name 0{{dot}}) /{{dot}} float_of_int (List.length list_name)
+    {%- endif -%}
+{%- endset -%}
+
+{%- set failure -%}
+    {%- if raises_failwith -%}
+        failwith {{fail_message}}
+    {%- else -%}
+        0{{dot}} 
     {%- endif -%}
 {%- endset -%}
 
