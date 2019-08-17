@@ -58,16 +58,16 @@ class CleanFirst(Rule):
 let {{recursion}} helper_name (list_name : {{_type}} list) : {{_type}} list =
     match list_name with
     | {{check_empty_list}} -> {{terminate}}
-    {%- if main_strategy == 'when' -%}
+    {% if main_strategy == 'when' -%}
     | head :: tail when head = -999 -> {{terminate}}
     | head :: tail when head < 0{{dot}} -> helper_name tail
     | head :: tail when head >= 0{{dot}} -> head :: helper_name tail
-    {%- elif main_strategy == 'if' -%}
+    {% elif main_strategy == 'if' -%}
     | head :: tail -> if head = -999 then {{terminate}} else if head < 0{{dot}} then helper_name tail else head :: (helper_name tail)
-    {%- elif main_strategy == 'match' -%}
+    {% elif main_strategy == 'match' -%}
     | -999 -> {{terminate}}
     | tail -> if head >= 0{{dot}} then helper_name tail else head :: (helper_name tail)
-    {%- endif -%}
+    {% endif -%}
 {% endset -%}
 
 {%- set rainfall_body -%} 
