@@ -96,6 +96,7 @@ let {{recursion}} rainfall {{params}}
             check_empty_list=check_empty_list,
             main_strategy=main_strategy,
             return_empty_list=return_empty_list,
+            average_strategy=average_strategy,
             dot='' if _type == 'int' else '.')
 
 class CleanInSC(Rule):
