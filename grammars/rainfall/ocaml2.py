@@ -5,16 +5,18 @@ Labels = GeneralRainfallLabels
 
 class CleanFirst(Rule):
     def render(self):
-        recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
-        _type = self.choice('_type', {'int': 1, 'float': 1})
+        # Global Choices
+        recursion = self.params['recursion']
+        _type = self.params['_type']
+        uses_annotation = self.params['uses_annotation']
+        helper_in_body = self.params['helper_in_body']
+        raises_failwith = self.params['raises_failwith']
+        fail_message = self.params['fail_message']
+        # Local Choices
         average_strategy = self.choice('average_strategy', {'direct': 1, 'list_fold_right_helper' : 1, 'list_fold_right_anon' : 1})
         main_strategy = self.choice('main_strategy', {'match' : 1, 'if' : 1, 'when' : 1})
         check_empty_list = self.choice('check_empty_list', {'[]' : 1, '[] | -999' : 1, })
         return_empty_list = self.choice('return_empty_list', {True: 1, False: 1})
-        uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
-        helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
-        raises_failwith = self.choice('raises_failwith', {True: 1, False: 1})
-        fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1, '\"There are no positive rainfall values.\"' : 1, '\"No rainfall values found\"' : 1})
 
         template = '''
 {%- set params -%}
@@ -98,16 +100,18 @@ let {{recursion}} rainfall {{params}}
 
 class CleanInSC(Rule):
     def render(self):
-        recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
-        uses_annotation = self.choice('uses_annotation', {True : 1, False: 1})
-        _type = self.choice('_type', {'int': 1, 'float': 1})
-        fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1, '\"There are no positive rainfall values.\"' : 1, '\"No rainfall values found\"' : 1})
+        # Global Choices
+        recursion = self.params['recursion']
+        _type = self.params['_type']
+        uses_annotation = self.params['uses_annotation']
+        helper_in_body = self.params['helper_in_body']
+        raises_failwith = self.params['raises_failwith']
+        fail_message = self.params['fail_message']
+        # Local Choices
         separate_sentinel_check = self.choice('separate_sentinel_check', {True: 1, False : 1})
         check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
         check_counter_val = self.choice('check_counter_val', {True: 1, False: 1})
-        helpers_in_body = self.choice('helpers_in_body', {True: 1, False: 1})
         anonymous_helpers = self.choice('anonymous_helpers', {True: 1, False: 1})
-        raises_failwith = self.choice('raises_failwith', {True : 1, False : 1})
 
         template = '''
 {%- set params -%}
@@ -169,13 +173,13 @@ let {{recursion}} counter_helper_name {{params}}
     {%- endif -%}
 {%- endset -%}
 
-{% if not anonymous_helpers and not helpers_in_body -%}
+{% if not anonymous_helpers and not helper_in_body -%}
 {{addition_helper}}
 {{counter_helper}} \n
 {% endif -%}
 
 let {{recursion}} rainfall {{params}}
-    {% if not anonymous_helpers and helpers_in_body -%}
+    {% if not anonymous_helpers and helper_in_body -%}
     {{addition_helper}}
     in {{counter_helper}}
     in {{rainfall_body}}
@@ -187,7 +191,7 @@ let {{recursion}} rainfall {{params}}
         -> {{failure}})
     {% endif -%}
 
-    {% if not anonymous_helpers and not helpers_in_body -%}
+    {% if not anonymous_helpers and not helper_in_body -%}
     {{rainfall_body}}
     {% endif -%}
 '''
@@ -197,23 +201,26 @@ let {{recursion}} rainfall {{params}}
             uses_annotation=uses_annotation,
             _type=_type,
             check_div_by_zero=check_div_by_zero,
-            helpers_in_body=helpers_in_body,
+            helper_in_body=helper_in_body,
             anonymous_helpers=anonymous_helpers,
             raises_failwith=raises_failwith,
             fail_message=fail_message,
             separate_sentinel_check=separate_sentinel_check,
             dot='' if _type == 'int' else '.')
 
+# No notion of helper_in_body 
 class SingleLoopHelper(Rule):
     def render(self):
+        # Global Choices
+        recursion = self.params['recursion']
         _type = self.params['_type']
-        recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
-        fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1, '\"There are no positive rainfall values.\"' : 1, '\"No rainfall values found\"' : 1})
-        uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
+        uses_annotation = self.params['uses_annotation']
+        raises_failwith = self.params['raises_failwith']
+        fail_message = self.params['fail_message']
+        # Local Choices
         # if_statement = self.choice('if_statement', {'if' : 1, 'when' : 1})
         check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
         gt_zero = self.choice('gt_zero', {True : 1, False : 1}) # Else student uses '= 0'
-        raises_failwith = self.choice('raises_failwith', {True : 1, False : 1})
         separate_sentinel_check = self.choice('separate_sentinel_check', {True: 1, False : 1})
         recurse_empty_list = self.choice('recurse_empty_list', {True: 1, False : 1})
         check_positive_head = self.choice('check_positive_head', {True: 1, False : 1})
@@ -304,15 +311,17 @@ using separate_sentinel_check. #}
 
 class SingleLoop(Rule):
     def render(self):
-        recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
-        uses_annotation = self.choice('uses_annotation', {True : 1, False: 1})
+        # Global Choices
+        recursion = self.params['recursion']
+        _type = self.params['_type']
+        uses_annotation = self.params['uses_annotation']
+        helper_in_body = self.params['helper_in_body']
+        raises_failwith = self.params['raises_failwith']
+        fail_message = self.params['fail_message']
+        # Local Choices
         rainfall_body_specs = self.choice('rainfall_body_specs', {'direct_pass': 1, 'recurse': 1})
         recursion_strategy = self.choice('recursion_strategy', {'match' : 1, 'let' : 1})
-        _type = self.choice('_type', {'int': 1, 'float': 1})
         check_empty_list = self.choice('check_empty_list', {'[]' : 1, '(0, 0)' : 1})
-        fail_message = self.choice('fail_message', {'\"No rainfall\"' : 1, '\"Could not compute average rainfall; passed 0 data.\"' : 1, '\"Empty list.\"' : 1, '\"no rainfall value could be calculated\"' : 1, '\"error: no average\"' : 1})
-        helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
-        raises_failwith = self.choice('raises_failwith', {True : 1, False : 1})
 
         template = '''
 {%- set failure -%}
@@ -375,7 +384,7 @@ let {{recursion}} rainfall {{params}}
             helper_body=SingleLoopHelper(_type=_type).render(),
             dot='' if _type == 'int' else '.')
 
-class Program(Rule):
+class Stategy(Rule):
     def render(self):
         strategy = self.choice('strategy', {
             Labels.SingleLoop: 1,
@@ -386,8 +395,28 @@ class Program(Rule):
         self.set_label(int(strategy))
 
         if strategy == Labels.SingleLoop:
-            return SingleLoop().render()
+            return SingleLoop(**self.params).render()
         if strategy == Labels.CleanFirst:
-            return CleanFirst().render()
+            return CleanFirst(**self.params).render()
         elif strategy == Labels.CleanInSC:
-            return CleanInSC().render()
+            return CleanInSC(**self.params).render()
+
+class GlobalChoices(Rule): 
+    def render(self):
+        recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
+        _type = self.choice('_type', {'int': 1, 'float': 1})
+        uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
+        helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
+        raises_failwith = self.choice('raises_failwith', {True: 1, False: 1})
+        fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1, '\"There are no positive rainfall values.\"' : 1, '\"No rainfall values found\"' : 1})
+
+        return Strategy(recursion=recursion,
+                _type=_type, uses_annotation=uses_annotation, 
+                helper_in_body=helper_in_body, 
+                raises_failwith=raises_failwith, 
+                fail_message=fail_message).render()
+
+class Program(Rule):
+    def render(self):
+        return GlobalChoices().render()
+        
