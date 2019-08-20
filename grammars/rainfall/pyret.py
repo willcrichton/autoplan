@@ -68,7 +68,7 @@ class SingleLoopHelper(Rule):
 {%- endif -%}
 '''
   
-  return self.format(
+    return self.format(
       template, gt_zero=gt_zero,
       record_or_params=record_or_params,
       sentinel_recurse=sentinel_recurse)
