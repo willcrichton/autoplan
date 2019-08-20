@@ -313,7 +313,7 @@ class SingleLoop(Rule):
         recursion_strategy = self.choice('recursion_strategy', {'match' : 1, 'let' : 1})
         _type = self.choice('_type', {'int': 1, 'float': 1})
         check_empty_list = self.choice('check_empty_list', {'[]' : 1, '(0, 0)' : 1})
-        fail_message = self.choice('fail_message', {'\"No rainfall\"' : 1, '\"Could not compute average rainfall; passed 0 data.\"' : 1, '\"Empty list.\"' : 1, '\"no rainfall value could be calculated\"' : 1, '\"error: no average\"' : 1})
+        fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1, '\"There are no positive rainfall values.\"' : 1, '\"No rainfall values found\"' : 1})
         helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
         raises_failwith = self.choice('raises_failwith', {True : 1, False : 1})
 
