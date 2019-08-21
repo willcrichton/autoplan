@@ -306,6 +306,7 @@ using separate_sentinel_check. #}
             recurse_empty_list=recurse_empty_list,
             check_positive_head=check_positive_head,
             uses_annotation=uses_annotation,
+            recursion=recursion,
             dot='' if _type == 'int' else '.')
 
 
@@ -381,10 +382,10 @@ let {{recursion}} rainfall {{params}}
             raises_failwith=raises_failwith,
             uses_annotation=uses_annotation,
             rainfall_body_specs=rainfall_body_specs,
-            helper_body=SingleLoopHelper(_type=_type).render(),
+            helper_body=SingleLoopHelper(**self.params).render(),
             dot='' if _type == 'int' else '.')
 
-class Stategy(Rule):
+class Strategy(Rule):
     def render(self):
         strategy = self.choice('strategy', {
             Labels.SingleLoop: 1,
@@ -395,11 +396,11 @@ class Stategy(Rule):
         self.set_label(int(strategy))
 
         if strategy == Labels.SingleLoop:
-            return SingleLoop(**self.params).render()
+            return SingleLoop(**self.params, strategy=strategy).render()
         if strategy == Labels.CleanFirst:
-            return CleanFirst(**self.params).render()
+            return CleanFirst(**self.params, strategy=strategy).render()
         elif strategy == Labels.CleanInSC:
-            return CleanInSC(**self.params).render()
+            return CleanInSC(**self.params, strategy=strategy).render()
 
 class GlobalChoices(Rule): 
     def render(self):
