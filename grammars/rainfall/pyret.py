@@ -5,6 +5,8 @@ Labels = GeneralRainfallLabels
 
 class SingleLoopHelper(Rule):
   def render(self):
+    check_div_by_zero = self.params['check_div_by_zero']
+    where_check_div_by_zero = self.params['where_check_div_by_zero']
     record_or_params = self.choice('record_or_params', {'record': 1, 'params': 1})
     sentinel_recurse = self.choice('sentinel_recurse', {True: 1, False: 1})
     gt_zero = self.choice('gt_zero', {True: 1, False: 1})
@@ -37,7 +39,7 @@ class SingleLoopHelper(Rule):
             else:
               sum / length
             end
-          {%- endif -%}
+          {% endif -%}
         {%- else -%}
         sum / length
         {%- endif -%}
@@ -62,7 +64,7 @@ class SingleLoopHelper(Rule):
           else:
             helper(tail, sum + head, length + 1)
           end
-        {%- endif -%}
+        {% endif -%}
     end
   end
 {%- endif -%}
@@ -76,47 +78,47 @@ class SingleLoopHelper(Rule):
 
 class SingleLoop(Rule):
   def render(self):
+    check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
+    where_check_div_by_zero = self.choice('where_check_div_by_zero', {'main' : 1, 'helper': 1})
     helper = SingleLoopHelper(check_div_by_zero=check_div_by_zero,
               where_check_div_by_zero=where_check_div_by_zero).render()
     helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
     error_strategy = self.choice('error_strategy', {'exception': 1, 'zero': 1})
-    check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
-    where_check_div_by_zero = self.choice('where_check_div_by_zero', {'main' : 1, 'helper': 1})
     return_logic_structure = self.choice('return_logic_structure', {'direct': 1, 'match': 1})
     
     template = '''
 {%- set failure -%}
-  {% if error_strategy == 'exception' -%}
+  {%- if error_strategy == 'exception' -%}
     raise("error")
-  {% else -%}
+  {%- else -%}
     0
-  {% endif -%}
+  {%- endif -%}
 {%- endset -%}
 
 {%- set return_logic -%}
   {%- if check_div_by_zero-%}
     {%- if where_check_div_by_zero == 'main' -%}
-      {% if return_logic_structure == 'direct'-%}
-        vals = helper(nums, 0, 0)
-        if vals.length == 0:
+      {%- if return_logic_structure == 'direct'-%}
+      vals = helper(nums, 0, 0)
+      if vals.length == 0:
         {{ failure }}
-        else:
-          vals.sum / vals.length
-      {% else -%}
-        cases(List) nums:
-        | empty => {{ failure }}
-        | link(head, tail) => 0 
-          if head == -999:
-            {{ failure }}
-          else: 
-            helper(nums, 0, 0)
-          end
-      {% endif -%}
+      else:
+        vals.sum / vals.length
+      {%- else -%}
+      cases(List) nums:
+      | empty => {{ failure }}
+      | link(head, tail) => 0 
+        if head == -999:
+          {{ failure }}
+        else: 
+          helper(nums, 0, 0)
+        end
+      {%- endif -%}
     {%- else -%}
-      helper(nums, 0, 0)
+    helper(nums, 0, 0)
     {%- endif -%}
   {%- else -%}
-    vals.sum / vals.length
+  vals.sum / vals.length
   {%- endif -%}
 {%- endset -%}
 
@@ -134,101 +136,95 @@ class SingleLoop(Rule):
     {{ rainfall_body }}
     {{ return_logic }}
   end
+
   {{ helper }}
 {%- endif -%}
 '''
 
-  # if helper_in_body:
-  #   template = '''
-  # '''
-  # else:
-  #   template = '''
-  # '''
-
-  return self.format(template, 
-    return_logic=return_logic, helper=helper,
-    check_div_by_zero=check_div_by_zero,
-    where_check_div_by_zero=where_check_div_by_zero,
-    return_logic_structure=return_logic_structure)
+    return self.format(template, 
+      helper=helper,
+      check_div_by_zero=check_div_by_zero,
+      where_check_div_by_zero=where_check_div_by_zero,
+      return_logic_structure=return_logic_structure)
    
-class SumList(Rule):
-  def render(self):
-    sum_strategy = self.choice('average_strategy', {
-      'for_fold': 1,
-      'foldr': 1
-    })
+# class SumList(Rule):
+#   def render(self):
+#     sum_strategy = self.choice('average_strategy', {
+#       'for_fold': 1,
+#       'foldr': 1
+#     })
 
-  if sum_strategy == 'for_fold':
-    return '''
-    for fold(total from 0, elem from nums): elem + total end
-    '''
-  else:
-    return 'nums.foldr(_+_,0)'
-
-
-class CleanFirstHelper(Rule):
-  def render(self):
-    template = '''
-fun helper(nums :: List<Number>) -> List<Number>:
-  cases(List) nums:
-  | empty => []
-  | link(f, r) =>
-    if f == -999: []
-    else if f < 0: helper(r)
-    else: link(f, helper(r))
-'''
-
-  return template
+#   if sum_strategy == 'for_fold':
+#     return '''
+#     for fold(total from 0, elem from nums): elem + total end
+#     '''
+#   else:
+#     return 'nums.foldr(_+_,0)'
 
 
-class CleanFirst(Rule):
-  def render(self):
-    helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
-    inline_average = self.choice('inline_average', {True: 1, False: 1})
-    checks_length = self.choice('checks_length', {True: 1, False: 1})
+# class CleanFirstHelper(Rule):
+#   def render(self):
+#     template = '''
+# fun helper(nums :: List<Number>) -> List<Number>:
+#   cases(List) nums:
+#   | empty => []
+#   | link(f, r) =>
+#     if f == -999: []
+#     else if f < 0: helper(r)
+#     else: link(f, helper(r))
+# '''
 
-    template = '''
-{%- set return_logic -%}
-  nums = helper(nums)
-  {%- if inline_average -%}
-  {{ list_sum }} / nums.length()
-  {%- else -%}
-  sum = {{ list_sum }}
-  sum / nums.length()
-  {%- endif -%}
-{%- endset -%}
+#   return template
 
-{%- set body -%}
-  {%- if checks_length -%}
-  case(List) nums:
-  | empty => 0
-  | link(_,_) =>
-     {{ return_logic }}
-  {%- else -%}
-  {{ return_logic }}
-  {%- endif -%}
-{%- endset -%}
 
-{%- if helper_in_body -%}
-fun rainfall(nums :: List<Number>) -> Number:
-  {{ helper }}
-  {{ body }}
-end
-{%- else -%}
-fun rainfall(nums :: List<Number>) -> Number:
-  {{ body }}
-end
+# class CleanFirst(Rule):
+#   def render(self):
+#     helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
+#     inline_average = self.choice('inline_average', {True: 1, False: 1})
+#     checks_length = self.choice('checks_length', {True: 1, False: 1})
 
-{{ helper }}
-{%- endif -%}
-'''
+#     template = '''
+# {%- set return_logic -%}
+#   nums = helper(nums)
+#   {%- if inline_average -%}
+#   {{ list_sum }} / nums.length()
+#   {%- else -%}
+#   sum = {{ list_sum }}
+#   sum / nums.length()
+#   {%- endif -%}
+# {%- endset -%}
 
-  return self.format(
-    template,
-    list_sum=SumList().render(),
-    inline_average=inline_average,
-    helper=CleanFirstHelper().render(),
-    helper_in_body=helper_in_body)
+# {%- set body -%}
+#   {%- if checks_length -%}
+#   case(List) nums:
+#   | empty => 0
+#   | link(_,_) =>
+#      {{ return_logic }}
+#   {%- else -%}
+#   {{ return_logic }}
+#   {%- endif -%}
+# {%- endset -%}
+
+# {%- if helper_in_body -%}
+# fun rainfall(nums :: List<Number>) -> Number:
+#   {{ helper }}
+#   {{ body }}
+# end
+# {%- else -%}
+# fun rainfall(nums :: List<Number>) -> Number:
+#   {{ body }}
+# end
+
+# {{ helper }}
+# {%- endif -%}
+# '''
+
+#   return self.format(
+#     template,
+#     list_sum=SumList().render(),
+#     inline_average=inline_average,
+#     helper=CleanFirstHelper().render(),
+#     helper_in_body=helper_in_body)
 
 
 # class SCHelper(Rule):
@@ -310,8 +306,8 @@ class Program(Rule):
     def render(self):
         strategy = self.choice('strategy', {
             Labels.SingleLoop: 1,
-            Labels.CleanFirst: 1,
-            Labels.CleanInSC: 1,
+            # Labels.CleanFirst: 1,
+            # Labels.CleanInSC: 1,
         })
 
         self.set_label(int(strategy))
