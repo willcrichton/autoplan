@@ -167,11 +167,13 @@ let {{recursion}} counter_helper_name {{params}}
 {{addition_helper}}
 {{counter_helper}} \n
 {% endif -%}
+
 let {{recursion}} rainfall {{params}}
     {% if not anonymous_helpers and helper_in_body -%}
     {{addition_helper}}
     in {{counter_helper}}
     in {{rainfall_body}}
+    
     {% elif anonymous_helpers -%} {# File 73.ml #}
     (try ((List.fold_right
     (fun var var -> (if (var = (-999)) then {{failure}} else if (var < 0) then var else (var + var))) list_name 0) /{{dot}} (List.fold_right
