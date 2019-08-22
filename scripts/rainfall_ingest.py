@@ -1,7 +1,8 @@
 import pandas as pd
 import os
+import pickle
 
-from autoplan.dataset import build_prelabeled_dataset, PrelabeledDataset
+from autoplan.dataset import build_prelabeled_dataset, PrelabeledDataset, concat_datasets
 from autoplan.token import OCamlTokenizer, PyretTokenizer, TokenizerError
 
 from grammars.rainfall.labels import GeneralRainfallLabels, DetailedRainfallLabels
@@ -66,6 +67,7 @@ def ingest_dataset(name, **kwargs):
     programs = []
     labels = []
     plancodes = []
+    countwhere  =[]
     skipped = 0
     for _, entry in codes.iterrows():
         path = config['path'](entry.ID)
@@ -97,11 +99,38 @@ def ingest_dataset(name, **kwargs):
         programs.append(src)
         plancodes.append(entry.Form)
         labels.append(general_label)
+        countwhere.append(entry.CountWhere)
 
     assert len(programs) > 0
 
     print('Skipped {} programs'.format(skipped))
-    return build_prelabeled_dataset(GeneralRainfallLabels, programs, labels, plancodes, tokenizer)
+    return build_prelabeled_dataset(GeneralRainfallLabels, programs, labels, plancodes, tokenizer, countwhere=countwhere)
+
+
+def load_new_labels(vocab_index, **kwargs):
+    name = 'T1'
+    new_labels = pickle.load(open(f'{DATA_DIR}/{name}-newlabels.pkl', 'rb'))
+    coding_csv = read_coding_csv(name)
+    config = dataset_config[name]
+    tokenizer = dataset_config[name]['tokenizer'](**kwargs)
+
+    programs = []
+    labels = []
+    for _, entry in coding_csv.iterrows():
+        if entry.ID not in new_labels:
+            continue
+
+        programs.append(open(config['path'](entry.ID)).read())
+        labels.append(new_labels[entry.ID])
+
+    return build_prelabeled_dataset(
+        GeneralRainfallLabels, programs, labels, None, tokenizer, vocab_index=vocab_index)
+
+
+def load_full_t1(**kwargs):
+    t1_base = ingest_dataset('T1', **kwargs)
+    t1 = concat_datasets(t1_base, load_new_labels(t1_base.vocab_index, **kwargs))
+    return t1
 
 
 if __name__ == "__main__":

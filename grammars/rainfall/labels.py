@@ -37,3 +37,9 @@ class DetailedRainfallLabels(Labels):
             return cls.CleanInSC
         else:
             raise Exception(f"Unknown label {s}")
+
+
+class CountWhere(Labels):
+    Helper = 0
+    Rainfall = 1
+    Own = 2

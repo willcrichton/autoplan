@@ -1,7 +1,8 @@
 from autoplan.grammar import Rule
-from .labels import GeneralRainfallLabels
+from .labels import GeneralRainfallLabels, CountWhere
 
 Labels = GeneralRainfallLabels
+
 
 class CleanFirst(Rule):
     def render(self):
@@ -208,7 +209,7 @@ let {{recursion}} rainfall {{params}}
             separate_sentinel_check=separate_sentinel_check,
             dot='' if _type == 'int' else '.')
 
-# No notion of helper_in_body 
+# No notion of helper_in_body
 class SingleLoopHelper(Rule):
     def render(self):
         # Global Choices
@@ -402,7 +403,7 @@ class Strategy(Rule):
         elif strategy == Labels.CleanInSC:
             return CleanInSC(**self.params, strategy=strategy).render()
 
-class GlobalChoices(Rule): 
+class GlobalChoices(Rule):
     def render(self):
         recursion = self.choice('recursion', {'' : 1, 'rec' : 1})
         _type = self.choice('_type', {'int': 1, 'float': 1})
@@ -412,12 +413,11 @@ class GlobalChoices(Rule):
         fail_message = self.choice('fail_message', {'\"No rain was collected\"' : 1, '\"There are no positive rainfall values.\"' : 1, '\"No rainfall values found\"' : 1})
 
         return Strategy(recursion=recursion,
-                _type=_type, uses_annotation=uses_annotation, 
-                helper_in_body=helper_in_body, 
-                raises_failwith=raises_failwith, 
+                _type=_type, uses_annotation=uses_annotation,
+                helper_in_body=helper_in_body,
+                raises_failwith=raises_failwith,
                 fail_message=fail_message).render()
 
 class Program(Rule):
     def render(self):
         return GlobalChoices().render()
-        
