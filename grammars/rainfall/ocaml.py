@@ -169,7 +169,7 @@ let {{recursion}} counter_helper_name {{params}}
     {%- endif -%}
 {%- endset -%}
 
-{% if not anonymous_helpers and not helpers_in_body -%}
+{% if not anonymous_helpers and not helper_in_body -%}
 {{addition_helper}}
 {{counter_helper}} \n
 {% endif -%}
@@ -185,9 +185,8 @@ let {{recursion}} rainfall {{params}}
     (fun var var -> (if (var = (-999)) then {{failure}} else if (var < 0) then var else (var + var))) list_name 0) /{{dot}} (List.fold_right
         (fun var var -> (if (var = (-999)) then {{failure}} else if (var < 0) then var else (1 + var))) list_name 0)) with division_by_zero_helper_name
         -> {{failure}})
-    {% endif -%}
 
-    {% if not anonymous_helpers and not helpers_in_body -%}
+    {% elif not anonymous_helpers and not helper_in_body -%}
     {{rainfall_body}}
     {% endif -%}
 '''
