@@ -10,9 +10,12 @@ let main () =
            (match item.pstr_desc with
             | Pstr_eval (expr, attr) -> () (* Printf.printf "%s\n" (Pprintast.string_of_expression expr) *)
             | Pstr_value (_, vals) ->
-              Pprintast.toplevel_phrase Format.str_formatter phrase;
-              Printf.printf "%s\n" (Format.flush_str_formatter ())
-            | _ -> Printf.printf "other"))
+              (match (List.hd vals).pvb_expr.pexp_desc with
+              | Pexp_fun _ ->
+                Pprintast.toplevel_phrase Format.str_formatter phrase;
+                Printf.printf "%s\n" (Format.flush_str_formatter ())
+              | _ -> ())
+            | _ -> ()))
            structure
        | _ -> ()))
     phrases

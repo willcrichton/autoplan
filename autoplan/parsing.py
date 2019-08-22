@@ -20,10 +20,10 @@ class InferenceStrategy(IntEnum):
 
 
 class ProgramParser:
-    def __init__(self, grammar, dataset, model_path, device, strategy=InferenceStrategy.MAP):
+    def __init__(self, grammar, dataset, model_path, model_opts, device, strategy=InferenceStrategy.MAP):
         self.dataset = dataset
         self.grammar = grammar
-        self.model = NeuralParser(dataset, device)
+        self.model = NeuralParser(dataset, device=device, **model_opts)
         self.model.load(model_path)
         self.model.eval()
         self.device = device
@@ -51,6 +51,9 @@ class ProgramParser:
 
         return self.choices[name][1]
 
+    def set_label(self, label):
+        pass
+
     def infer(self, program, program_len):
         set_generator(self)
 
@@ -61,6 +64,4 @@ class ProgramParser:
             program_len.to(self.device))
         self.h = self.model.init_hidden(program.size(0))
 
-        self.grammar.render()
-
-        return self.choices
+        return self.grammar.render(), self.choices

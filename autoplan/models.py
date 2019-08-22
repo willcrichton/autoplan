@@ -71,21 +71,22 @@ class ProgramClassifier(nn.Module):
 
 
 class NeuralParser(nn.Module):
-    def __init__(self, dataset, device, embedding_size=300, hidden_size=256, hidden_dropout=0.2):
+    def __init__(self, dataset, device, model=nn.LSTM, embedding_size=300, hidden_size=256, hidden_dropout=0.2):
         super().__init__()
 
         self.device = device
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.choice_indices = dataset.choice_indices
-        name_order = sorted(dataset.choices.keys(), key=lambda name: self.choice_indices[name])
+        self.name_order = sorted(dataset.choices.keys(), key=lambda name: self.choice_indices[name])
 
         # Inputs
-        self.encoder = ProgramEncoder(dataset, device, embedding_size=embedding_size, hidden_size=hidden_size)
+        self.encoder = ProgramEncoder(dataset, device, embedding_size=embedding_size, hidden_size=hidden_size,
+                                      model=model)
         self.index_embedding = nn.Embedding(len(dataset.choices), self.embedding_size)
         self.choice_embedding = nn.ModuleList([
             nn.Embedding(len(dataset.choices[name]), self.embedding_size)
-            for name in name_order
+            for name in self.name_order
         ])
 
         # RNN
@@ -98,7 +99,7 @@ class NeuralParser(nn.Module):
         # RV prediction
         self.inference = nn.ModuleList([
             nn.Linear(self.hidden_size, len(dataset.choices[name]))
-            for name in name_order
+            for name in self.name_order
         ])
 
         self.to(device=device)
@@ -112,6 +113,13 @@ class NeuralParser(nn.Module):
         index_emb = self.index_embedding(prev_choice)
 
         choice_value = choices.gather(dim=1, index=prev_choice.unsqueeze(-1))
+
+        for i in range(len(prev_choice)):
+            num_embs = self.choice_embedding[prev_choice[i]].num_embeddings
+            if num_embs <= choice_value[i]:
+                raise Exception('Choice {} ({}) has value {} greater than size {}'.format(
+                    i, self.name_order[prev_choice[i]], choice_value[i].item(), num_embs))
+
         choice_emb = torch.cat([
             self.choice_embedding[prev_choice[i]](choice_value[i])
             for i in range(len(prev_choice))
@@ -146,10 +154,17 @@ class NeuralParser(nn.Module):
         for i in range(max_trace_len - 1):
             prev_choice = trace[:, i]
             cur_choice = trace[:, i+1]
-            pred, h = self.step(prev_choice, cur_choice, program_emb, h, choices)
-            for j in range(batch_size):
-                if i < trace_len[j]:
-                    preds[j].append(pred[j])
+
+            pred, h = self.step(
+                prev_choice,
+                cur_choice,
+                program_emb,
+                h,
+                choices)
+
+            not_ended = (cur_choice != 0).nonzero().squeeze(-1)
+            for idx in not_ended:
+                preds[idx].append(pred[idx])
 
         return preds
 

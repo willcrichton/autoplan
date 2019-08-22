@@ -14,6 +14,7 @@ def plot_accuracy(evals, **kwargs):
     ax = pd.Series([e.accuracy for e in evals]).plot(**kwargs)
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Accuracy')
+    ax.set_ylim(0, 1)
     return ax
 
 def plot_cm(ax, name, cm, classes, normalize=True):

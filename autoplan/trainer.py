@@ -10,7 +10,7 @@ import numpy as np
 from tqdm.auto import tqdm
 import itertools
 from collections import ChainMap
-
+import copy
 
 @dataclass
 class ClassEvaluation:
@@ -35,34 +35,37 @@ class ClassEvaluation:
         wrong = self.true != self.pred
         return wrong.nonzero()[0]
 
-    def plot_cm(self, title, ax=None, normalize=True):
+    def plot_cm(self, title='', ax=None, normalize=True):
         from .vis import plot_cm
         import matplotlib.pyplot as plt
         return plot_cm(plt.gca() if ax is None else ax,
                        title, self.confusion_matrix, self.classes, normalize)
 
-    def print_incorrect(self, dataset, labels):
+    def print_incorrect(self, dataset):
         idxs = self.incorrect()
         for idx in idxs:
-            print(dataset[idx]['source'])
+            print(dataset.dataset[idx]['source'])
             print('Pred: {}\nTrue: {}'.format(
-                str(labels(self.pred[idx])), str(labels(self.true[idx]))))
+                str(dataset.label_set[self.pred[idx]]), str(dataset.label_set[self.true[idx]])))
             print('='*30 + '\n')
 
 
 class BaseTrainer:
     def eval(self):
+        return self.eval_on(self.train_loader), self.eval_on(self.val_loader)
+
+    def eval_on(self, loader):
         self.model.eval()
-        train_eval = self.eval_on(self.train_loader)
-        val_eval = self.eval_on(self.val_loader)
+        evl = self._eval_on(loader)
         self.model.train()
-        return train_eval, val_eval
+        return evl
 
     def train(self, epochs, progress=True):
         iterator = tqdm(range(epochs)) if progress else range(epochs)
         losses = []
         train_eval = []
         val_eval = []
+        state = []
 
         for _ in iterator:
             loss = self.train_one_epoch()
@@ -70,8 +73,9 @@ class BaseTrainer:
             train, val = self.eval()
             train_eval.append(train)
             val_eval.append(val)
+            state.append(copy.deepcopy(self.model.state_dict()))
 
-        return losses, train_eval, val_eval
+        return losses, train_eval, val_eval, state
 
     @classmethod
     def crossval(cls, dataset, epochs, *args, k=1, progress=False, **kwargs):
@@ -91,7 +95,7 @@ class BaseTrainer:
     @classmethod
     def crossval_helper(cls, all_eval, dataset, epochs, *args, progress=False, **kwargs):
         trainer = cls(dataset, *args, **kwargs)
-        loss, train_eval, val_eval = trainer.train(epochs, progress=False)
+        loss, train_eval, val_eval, _ = trainer.train(epochs, progress=False)
         all_eval['accuracy'].append(max([eval_.accuracy for eval_ in val_eval]))
         all_eval['train_eval'].append(train_eval)
         all_eval['val_eval'].append(val_eval)
@@ -108,7 +112,7 @@ class ClassifierTrainer(BaseTrainer):
 
         # If our classes are imbalanced, then the weights on the loss encourage the network
         # to not just predict the class balance after training.
-        self.loss_fn = nn.CrossEntropyLoss(weight=1/dataset.class_balance)
+        self.loss_fn = nn.CrossEntropyLoss(weight=1/dataset.class_balance())
 
         # Optimizer modulates how fast the network learns during training
         self.optimizer = optim.Adam(self.model.parameters(), **optim_opts)
@@ -144,7 +148,7 @@ class ClassifierTrainer(BaseTrainer):
                                 program_len=program_len)
         return pred_label.topk(1, dim=1)[1].squeeze(-1).cpu()
 
-    def eval_on(self, loader):
+    def _eval_on(self, loader):
         true = []
         pred = []
         for batch in loader:
@@ -154,11 +158,12 @@ class ClassifierTrainer(BaseTrainer):
 
 
 class ParserTrainer(BaseTrainer):
-    def __init__(self, dataset, device=None, batch_size=100, model_opts={}):
+    def __init__(self, dataset, split, device=None, batch_size=100, model_opts={}, val_frac=0.33, optim_opts={}):
         self.model = NeuralParser(dataset, device, **model_opts)
-        self.train_loader, self.val_loader = dataset.split_train_val()
-        self.optimizer = optim.Adam(self.model.parameters())
+        self.optimizer = optim.Adam(self.model.parameters(), **optim_opts)
         self.loss_fn = nn.CrossEntropyLoss(reduction='sum')
+        (self.train_dataset, self.train_loader), \
+            (self.val_dataset, self.val_loader) = split.set_train_val(val_frac)
         self.dataset = dataset
         self.label_names = {
             k: [self._truncate(str(name)) for _, name in dataset.choices[k]]
@@ -180,12 +185,13 @@ class ParserTrainer(BaseTrainer):
                 batch['program'], batch['program_len'], batch['trace'], batch['trace_len'], batch['choices'])
 
             loss = 0
-            for i in range(len(preds)):
-                for t in range(len(preds[i])):
+            for batch_idx in range(len(preds)):
+                for t in range(batch['trace_len'][batch_idx] - 1):
                     # [t+1] for start token
+                    choice_idx = batch['trace'][batch_idx][t+1]
                     loss += self.loss_fn(
-                        preds[i][t].unsqueeze(0).cpu(),
-                        batch['choices'][i][t+1].unsqueeze(0).cpu())
+                        preds[batch_idx][t].unsqueeze(0).cpu(),
+                        batch['choices'][batch_idx][choice_idx].unsqueeze(0).cpu())
 
             loss.backward()
             self.optimizer.step()
@@ -194,13 +200,17 @@ class ParserTrainer(BaseTrainer):
 
         return total_loss
 
-    def eval_on(self, loader):
+    def _eval_on(self, loader):
         choice_true = defaultdict(list)
         choice_pred = defaultdict(list)
         for batch in self.val_loader:
             pred_choices = self.model.predict(
                 batch['program'], batch['program_len'], batch['trace'], batch['trace_len'], batch['choices'])
-            for (trace, pred, true) in zip(batch['trace'], pred_choices, batch['choices']):
+            true_choices = torch.tensor([
+                [batch['choices'][i][j] for j in batch['trace'][i]]
+                for i in range(len(batch['trace']))
+            ])
+            for (trace, pred, true) in zip(batch['trace'], pred_choices, true_choices):
                 # [1:] for start token
                 for (choice_index, value_pred, value_true) in zip(trace[1:], pred, true[1:]):
                     choice_pred[choice_index.item()].append(value_pred.item())
