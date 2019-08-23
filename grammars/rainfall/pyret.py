@@ -5,8 +5,10 @@ Labels = GeneralRainfallLabels
 
 '''
 TODO: 
-- Merge CFH_SumHelper and CFH_CounterHelper into one function and use params
-- Add direct syntax to all CleanFirstHelpers (only 'match' now)
+- Merge SumHelper and CounterHelper into one function 
+and use params for head vs 1, sum vs count
+
+- Add 'direct' syntax to all CleanFirstHelpers (only 'match' now), file 141
 '''
 
 class SingleLoopHelper(Rule):
@@ -149,7 +151,7 @@ class SingleLoop(Rule):
 			return_logic_structure=return_logic_structure)
 
 
-class CFH_SumHelper(Rule):
+class SumHelper(Rule):
 	def render(self):
 		uses_annotation = self.params['uses_annotation']
 		recurse_strategy = self.params['recurse_strategy']
@@ -181,7 +183,7 @@ end
 			annotation = '<Number>' if uses_annotation else '')
 
 
-class CFH_CounterHelper(Rule):
+class CounterHelper(Rule):
 	def render(self):
 		uses_annotation = self.params['uses_annotation']
 		recurse_strategy = self.params['recurse_strategy']
@@ -213,7 +215,7 @@ end
 			annotation = '<Number>' if uses_annotation else '')
 
 
-class CFH_CleanOnly(Rule):
+class CleanOnly(Rule):
 	def render(self):
 		error_strategy = self.params['error_strategy']
 		return_empty = self.params['return_empty']
@@ -260,22 +262,22 @@ end
 			annotation = '<Number>' if uses_annotation else '')
 
 
-class CFH_CleanSumCounter(Rule):
+class CleanSumCounter(Rule):
 	def render(self):
 		helper_logic = self.params['helper_logic']
 		error_strategy = self.params['error_strategy']
 		return_empty = self.params['return_empty']
 		recurse_strategy = self.params['recurse_strategy']
 
-		clean_function = CFH_CleanOnly(**self.params, 
+		clean_function = CleanOnly(**self.params, 
   			error_strategy=error_strategy,
   			return_empty=return_empty,
   			recurse_strategy=recurse_strategy).render()
-		sum_function = CFH_SumHelper(**self.params, 
+		sum_function = SumHelper(**self.params, 
   			error_strategy=error_strategy,
   			return_empty=return_empty,
   			recurse_strategy=recurse_strategy).render()
-		counter_function = CFH_CounterHelper(**self.params, 
+		counter_function = CounterHelper(**self.params, 
   			error_strategy=error_strategy,
   			return_empty=return_empty,
   			recurse_strategy=recurse_strategy).render()
@@ -295,12 +297,11 @@ class CFH_CleanSumCounter(Rule):
 			counter_function=counter_function,
 			error_strategy=error_strategy,
 			return_empty=return_empty, 
-			recurse_strategy=recurse_strategy,
-			annotation = '<Number>' if uses_annotation else '')
+			recurse_strategy=recurse_strategy)
 
 
 # File 155
-class CFH_SentinelOnly(Rule):
+class SentinelOnly(Rule):
 	def render(self):
 		error_strategy = self.params['error_strategy']
 		return_empty = self.params['return_empty']
@@ -353,17 +354,17 @@ class CleanFirstHelper(Rule):
   	return_empty = self.choice('return_empty', {True: 1, False: 1})
 
   	if helper_logic == 'clean_only':
-  		return CFH_CleanOnly(**self.params, 
+  		return CleanOnly(**self.params, 
   			error_strategy=error_strategy,
   			return_empty=return_empty,
   			recurse_strategy=recurse_strategy).render()
   	elif helper_logic == 'clean_sum_counter' or 'clean_sum':
-  		return CFH_CleanSumCounter(**self.params, 
+  		return CleanSumCounter(**self.params, 
   			error_strategy=error_strategy,
   			return_empty=return_empty,
   			recurse_strategy=recurse_strategy).render()
   	else:
-  		return CFH_SentinelOnly(**self.params, 
+  		return SentinelOnly(**self.params, 
   			error_strategy=error_strategy,
   			return_empty=return_empty,
   			recurse_strategy=recurse_strategy).render()
@@ -512,94 +513,104 @@ class CleanFirst(Rule):
 		return_logic_structure=return_logic_structure, 
 		annotation = '<Number>' if uses_annotation else '')
 
-# class SCHelper(Rule):
-#     def render(self):
-#         sc_helper_style = self.choice('sc_helper_style', {'case': 1, 'if': 1})
 
-#         template = '''
-# {%- set rec_expr -%}
-#   {%- if sum -%} f + {%- else -%} 1 + {%- endif -%} helper(r)
-# {%- endset -%}
+class SCHelper(Rule):
+    def render(self):
+    	helper_logic = self.params['helper_logic']
+  		uses_annotation = self.params['uses_annotation']
 
-# fun helper(nums :: List<Number>) -> Number:
-#   {%- if sc_helper_style == 'case' -%}
-#   cases(List) nums:
-#     | empty => 0
-#     | link(f, r) =>
-#       if f == -999:
-#         0
-#       else if f < 0:
-#         helper(r)
-#       else:
-#         {{ rec_expr }}
-#       end
-#   {%- else -%}
-#   if is-empty(nums):
-#     0
-#   else if nums.first == -999:
-#     0
-#   else if nums.first < 0:
-#     helper(nums.rest)
-#   else:
-#     {{ rec_expr }}
-#   end
-#   {%- endif -%}
-# '''
-#         return self.format(
-#             template,
-#             sc_helper_style=sc_helper_style,
-#             sum=self.params['sum'])
+		clean_function = CleanOnly(**self.params).render()
+		sum_function = SumHelper(**self.params).render()
+		counter_function = CounterHelper(**self.params).render()
+
+template = '''
+{{ clean_function }}
+
+{{ sum_function }}
+
+{%- if helper_logic == 'clean_sum_counter' -%}
+{{ counter_function }}
+{%- endif -%}
+'''
+
+	return self.format(template,
+		helper_logic=helper_logic,
+		uses_annotation=uses_annotation,
+		clean_function=clean_function,
+		sum_function=sum_function,
+		counter_function=counter_function)
 
 
-# class CleanInSC(Rule):
-#     def render(self):
-#         helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
+class CleanInSC(Rule):
+    def render(self):
+    	check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
+    	helper_logic = self.choice('helper_logic', {'clean_only': 1, 'clean_sum_counter': 1})
+        helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
+        uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
+        helper = SCHelper(helper_logic=helper_logic, uses_annotation=uses_annotation).render()
 
-#         template = '''
-# {%- set return_logic -%}
-#   c = count(nums)
-#   s = sum(nums)
-#   if c > 0:
-#     s / c
-#   else:
-#     0
-#   end
-# {%- endset -%}
-# {%- if helper_in_body -%}
-# fun rainfall(nums :: List<Number>) -> Number:
-#   {{ sum_helper }}
-#   {{ count_helper }}
-#   {{ return_logic }}
-# end
-# {%- else -%}
-# fun rainfall(nums :: List<Number>) -> Number:
-#   {{ return_logic }}
-# end
+        template = '''
+{%- set return_logic -%}
+	{%- if helper_logic == 'clean_sum_counter' -%}
+  	length = counter_helper(nums)
+  	sum = sum_helper(nums)
+  		{%- if check_div_by_zero -%}
+  		if length > 0:
+    		sum / length
+  		else:
+    		0
+  		end
+  		{%- else -%}
+  		sum / length
+  		{%- endif -%}
+  	{%- elif helper_logic == 'clean_only' -%}
+  		cases(List{{annotation}}) nums:
+    	| empty => 0
+    	| link(head, tail) => 
+    	  	if head == -999: 
+    	  		0
+    	  	else: 
+    	  		clean_helper(nums, 0, 0)
+    	  	end
+  		end 
+  	{%- endif -%}
+{%- endset -%}
 
-# {{ sum_helper }}
-# {{ count_helper }}
-# {%- endif -%}
-#         '''
+{%- if helper_in_body -%}
+fun rainfall(nums :: List{{annotation}}) -> Number:
+	{{ helper }}
+  	{{ return_logic }}
+end
+{%- else -%}
+fun rainfall(nums :: List{{annotation}}) -> Number:
+  {{ return_logic }}
+end
 
-#         return self.format(
-#             template,
-#             helper_in_body=helper_in_body,
-#             sum_helper=SCHelper(sum=True).render(),
-#             count_helper=SCHelper(sum=False).render())
+{{ helper }}
+{%- endif -%}
+'''
+
+        return self.format(template,
+        	check_div_by_zero=check_div_by_zero,
+        	helper_logic=helper_logic,
+            helper_in_body=helper_in_body,
+            helper=helper,
+            uses_annotation=uses_annotation,
+            annotation = '<Number>' if uses_annotation else '')
 
 class Program(Rule):
-		def render(self):
-				strategy = self.choice('strategy', {
-						Labels.SingleLoop: 1,
-						Labels.CleanFirst: 1,
-						# Labels.CleanInSC: 1,
-				})
+	def render(self):
+		strategy = self.choice('strategy', {
+			Labels.SingleLoop: 1,
+			Labels.CleanFirst: 1,
+			Labels.CleanInSC: 1,
+		})
 
-				self.set_label(int(strategy))
+		self.set_label(int(strategy))
 
-				if strategy == Labels.SingleLoop:
-						return SingleLoop().render()
-				elif strategy == Labels.CleanFirst:
-				    return CleanFirst().render()
-				# elif strategy == Labels.CleanInSC:
-				#     return CleanInSC().render()
+		if strategy == Labels.SingleLoop:
+			return SingleLoop().render()
+		elif strategy == Labels.CleanFirst:
+		    return CleanFirst().render()
+		elif strategy == Labels.CleanInSC:
+		    return CleanInSC().render()
