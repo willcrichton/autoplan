@@ -96,7 +96,7 @@ class SingleLoop(Rule):
         template = '''
 {%- set failure -%}
     {%- if error_strategy == 'exception' -%}
-        raise("error")
+        raise(error)
     {%- else -%}
         0
     {%- endif -%}
@@ -223,7 +223,7 @@ class CleanOnly(Rule):
         template = '''
 {%- set failure -%}
     {%- if error_strategy == 'exception' -%}
-        raise("error")
+        raise(error)
     {%- elif error_strategy == 'zero' -%}
         0
     {%- elif return_empty -%}
@@ -300,7 +300,7 @@ class SentinelOnly(Rule):
         template = '''
 {%- set failure -%}
     {%- if error_strategy == 'exception' -%}
-        raise("error")
+        raise(error)
     {%- elif return_empty -%}
         empty
     {%- else -%}
@@ -375,7 +375,7 @@ class CleanFirst(Rule):
     {%- if helper_logic == 'clean_only' -%}
         {%- if return_logic_structure == 'direct'-%}
             positive_nums = clean_helper(nums)
-            {%- if check_div_by_zero -%}
+            {% if check_div_by_zero %}
             if positive_nums == []: 
                 0
             else: 
@@ -384,15 +384,15 @@ class CleanFirst(Rule):
                     average + (elem / length)
                 end
             end 
-            {%- else -%}
+            {%- else %}
             length = positive_nums.length()
             for fold(average from 0, elem from positive_nums):
                 average + (elem / length)
             end
-            {%- endif -%}
+            {% endif -%}
         {%- elif return_logic_structure == 'match' -%} 
-            {%- if anonymous_functions -%}
             positive_nums = clean_helper(nums)
+            {% if anonymous_functions %}
             cases(List{{annotation}}) positive_nums:
             | empty => 0
             | link(head, tail) =>
@@ -400,14 +400,14 @@ class CleanFirst(Rule):
                 average = sum / positive_nums.length()
                 average
             end 
-            {%- else -%}
+            {%- else %}
             cases (List{{annotation}}) clean_helper(nums):
             | empty => 0
             | link(head, tail) =>
                 fold(head + tail, 0, clean_helper(nums))/clean_helper(nums).length()
             end
-            {%- endif -%}  
-        {%- else -%} {# rare solutions #}
+            {% endif -%}  
+        {%- else %} {# rare solutions #}
             positive_nums = clean_helper(nums)
             sum = for fold(s from 0, n from positive_nums):
                 if n < 0:
@@ -419,41 +419,40 @@ class CleanFirst(Rule):
             sum/positive_nums.length()
         {%- endif -%}
     {%- elif helper_logic == 'clean_sum' -%}
-        {%- if return_logic_structure == 'direct'-%}
         positive_nums = clean_helper(nums)
+        {% if return_logic_structure == 'direct'-%}
         length = positive_nums.length()
         sum = sum_helper(positive_nums)
-            {%- if check_div_by_zero -%}
+            {% if check_div_by_zero %}
             if length == 0:
                 0
             else:
                 average = sum / length
             end 
-            {%- else -%} 
+            {%- else %} 
             average = sum / length
-            {%- endif -%}
-        {%- else -%} {# Change to elif and include rare node above as needed}
-        positive_nums = clean_helper(nums)
+            {% endif -%}
+        {%- else %} {# Change to elif and include rare node above as needed #}
         cases(List{{annotation}}) positive_nums:
         | empty => 0
         | link(head, tail) => 
             sum_helper(positive_nums) / positive_nums.length()
         end
-        {%- endif -%}
+        {% endif -%}
     {%- elif helper_logic == 'clean_sum_counter' -%}
         {%- if return_logic_structure == 'direct'-%}
         {# nums was overwritten, now it's name of the cleaned up list #}
         length = counter_helper(nums)
-            {%- if check_div_by_zero -%}
+            {%- if check_div_by_zero %}
             if length == 0:
                 0
             else:
                 sum_helper(nums)/length
             end
-            {%- else -%}
+            {%- else %}
             sum_helper(nums)/length
-            {%- endif -%}
-        {%- else -%} {# Change to elif and include rare node above as needed}
+            {% endif -%}
+        {%- else %} {# Change to elif and include rare node above as needed #}
         cases (List<Number>) nums:
         | empty => 0
         | link(head, tail) =>
@@ -461,8 +460,8 @@ class CleanFirst(Rule):
             length = counter_helper(nums)
             positive_nums / length
         end
-        {%- endif -%}
-    {%- else -%} {# Student only cleaned to detect the sentinel, file 155}
+        {% endif -%}
+    {%- else %} {# Student only cleaned to detect the sentinel, file 155 #}
     cases (List<Number>) nums:
     | empty => 0
     | link(head, tail) =>
@@ -470,7 +469,7 @@ class CleanFirst(Rule):
         total = fold(fun(sum, elem): sum + elem;, 0, positive_nums)
         total / positive_nums.length()
     end
-    {%- endif -%}
+    {% endif -%}
 {%- endset -%}
 
 {%- if helper_in_body -%}
@@ -486,7 +485,6 @@ class CleanFirst(Rule):
 
     {{ helper }}
 {%- endif -%}
-
 '''
 
         return self.format(
@@ -507,7 +505,6 @@ class SCHelper(Rule):
         helper_logic = self.params['helper_logic']
         uses_annotation = self.params['uses_annotation']
         recurse_strategy = self.params['recurse_strategy']
-        
         clean_function = CleanOnly(**self.params,
             error_strategy = 'zero',
             return_empty = False).render()
@@ -597,16 +594,16 @@ end
 class Program(Rule):
     def render(self):
         strategy = self.choice('strategy', {
-            Labels.SingleLoop: 1,
-            # Labels.CleanFirst: 1,
-            Labels.CleanInSC: 1
+            # Labels.SingleLoop: 1,
+            Labels.CleanFirst: 1,
+            # Labels.CleanInSC: 1
         })
 
         self.set_label(int(strategy))
 
         if strategy == Labels.SingleLoop:
             return SingleLoop().render()
-        # elif strategy == Labels.CleanFirst:
-        #     return CleanFirst().render()
+        elif strategy == Labels.CleanFirst:
+            return CleanFirst().render()
         elif strategy == Labels.CleanInSC:
             return CleanInSC().render()
