@@ -43,21 +43,21 @@ class SingleLoopHelper(Rule):
             {%- if check_div_by_zero-%}
                 {%- if where_check_div_by_zero == 'helper' -%}
                     if length == 0:
-                        {{ failure }}
+                        {{ failure }} \n
                     else:
                         sum / length
                     end
                 {% endif -%}
             {%- else -%}
             sum / length
-            {%- endif -%}
+            {% endif -%}
         | link(head, tail) =>
             if head == -999:
                 {%- if sentinel_recurse -%}
                 helper([], sum, length)
                 {%- else -%}
                 sum / length
-                {%- endif -%}
+                {% endif -%}
                 
             {%- if gt_zero -%}
                 else if head > 0:
@@ -65,7 +65,7 @@ class SingleLoopHelper(Rule):
                 else:
                     helper(tail, sum, length)
                 end
-            {%- else -%}
+            {% else -%}
                 else if head < 0:
                     helper(tail, sum, length)
                 else:
@@ -108,15 +108,15 @@ class SingleLoop(Rule):
             {%- if return_logic_structure == 'direct'-%}
             vals = helper(nums, 0, 0)
             if vals.length == 0:
-                {{ failure }}
+                {{ failure }} \n
             else:
                 vals.sum / vals.length
             {%- else -%}
             cases(List) nums:
-            | empty => {{ failure }}
+            | empty => {{ failure }} \n
             | link(head, tail) => 0 
-                if head == -999:
-                    {{ failure }}
+                if head == -999: 
+                    {{ failure }} \n
                 else: 
                     helper(nums, 0, 0)
                 end
@@ -172,11 +172,10 @@ fun sum_helper(nums :: List{{ annotation }}) -> Number:
         if head == -999:
             0
         else:
-            {{recurse}}
+            {{recurse}} \n
         end
     end
-end
-'''
+end \n'''
         return self.format(template, 
             recurse_strategy=recurse_strategy,
             uses_annotation=uses_annotation,
@@ -204,7 +203,7 @@ fun counter_helper(nums :: List{{ annotation }}) -> Number:
         if head == -999:
             0
         else:
-            {{recurse}}
+            {{recurse}} \n
         end
     end
 end
@@ -213,7 +212,6 @@ end
             recurse_strategy=recurse_strategy,
             uses_annotation=uses_annotation,
             annotation = '<Number>' if uses_annotation else '')
-
 
 class CleanOnly(Rule):
     def render(self):
@@ -226,6 +224,8 @@ class CleanOnly(Rule):
 {%- set failure -%}
     {%- if error_strategy == 'exception' -%}
         raise("error")
+    {%- elif error_strategy == 'zero' -%}
+        0
     {%- elif return_empty -%}
         empty
     {%- else -%}
@@ -243,18 +243,17 @@ class CleanOnly(Rule):
 
 fun clean_helper(nums :: List{{ annotation }}) -> List{{ annotation }}:
     cases(List{{ annotation }}) nums:
-    | empty => {{ failure }}
+    | empty => {{ failure }} \n
     | link(head, tail) =>
         if head == -999:
-            {{ failure }}
+            {{ failure }} \n
         else if head < 0:
             clean_helper(tail)
         else:
-            {{ recurse }}
+            {{ recurse }} \n
         end
     end
-end
-'''
+end \n'''
 
         return self.format(template,
             error_strategy=error_strategy,
@@ -274,9 +273,9 @@ class CleanSumCounter(Rule):
         counter_function = CounterHelper(**self.params).render()
 
         template = '''
-{{ clean_function }}
+{{ clean_function }} \n
 
-{{ sum_function }}
+{{ sum_function }} \n
 
 {%- if helper_logic == 'clean_sum_counter' -%}
 {{ counter_function }}
@@ -319,12 +318,12 @@ class SentinelOnly(Rule):
 
 fun sentinel_only_helper(lst :: List{{ annotation }}, x :: Any) -> List{{ annotation }}:
     cases (List{{ annotation }}) lst:
-    | empty => {{failure}}
+    | empty => {{failure}} \n
     | link(head, tail) =>
         if head == x:
-            {{failure}}
+            {{failure}} \n
         else:
-            {{recurse}}
+            {{recurse}} \n
         end
     end
 end
@@ -503,19 +502,22 @@ class CleanFirst(Rule):
             return_logic_structure=return_logic_structure, 
             annotation= '<Number>' if uses_annotation else '')
 
-
 class SCHelper(Rule):
     def render(self):
         helper_logic = self.params['helper_logic']
         uses_annotation = self.params['uses_annotation']
-        clean_function = CleanOnly(**self.params).render()
+        recurse_strategy = self.params['recurse_strategy']
+        
+        clean_function = CleanOnly(**self.params,
+            error_strategy = 'zero',
+            return_empty = False).render()
         sum_function = SumHelper(**self.params).render()
         counter_function = CounterHelper(**self.params).render()
 
         template = '''
-{{ clean_function }}
+{{ clean_function }} \n
 
-{{ sum_function }}
+{{ sum_function }} \n
 
 {%- if helper_logic == 'clean_sum_counter' -%}
 {{ counter_function }}
@@ -528,29 +530,32 @@ class SCHelper(Rule):
             uses_annotation=uses_annotation,
             clean_function=clean_function,
             sum_function=sum_function,
-            counter_function=counter_function)
+            counter_function=counter_function,
+            recurse_strategy=recurse_strategy)
 
 
 class CleanInSC(Rule):
     def render(self):
+        recurse_strategy = self.choice('recurse_strategy', {'addition': 1, 'link' : 1})
         check_div_by_zero = self.choice('check_div_by_zero', {True: 1, False: 1})
         helper_logic = self.choice('helper_logic', {'clean_only': 1, 'clean_sum_counter': 1})
         helper_in_body = self.choice('helper_in_body', {True: 1, False: 1})
         uses_annotation = self.choice('uses_annotation', {True: 1, False: 1})
-        helper = SCHelper(helper_logic=helper_logic, uses_annotation=uses_annotation).render()
+        helper = SCHelper(helper_logic=helper_logic, 
+            uses_annotation=uses_annotation, recurse_strategy=recurse_strategy).render()
 
         template = '''
 {%- set return_logic -%}
     {%- if helper_logic == 'clean_sum_counter' -%}
     length = counter_helper(nums)
     sum = sum_helper(nums)
-        {%- if check_div_by_zero -%}
+        {%- if check_div_by_zero %}
         if length > 0:
             sum / length
         else:
             0
         end
-        {%- else -%}
+        {%- else %}
         sum / length
         {%- endif -%}
     {%- elif helper_logic == 'clean_only' -%}
@@ -586,21 +591,22 @@ end
             helper_in_body=helper_in_body,
             helper=helper,
             uses_annotation=uses_annotation,
+            recurse_strategy=recurse_strategy,
             annotation = '<Number>' if uses_annotation else '')
 
 class Program(Rule):
     def render(self):
         strategy = self.choice('strategy', {
-            # Labels.SingleLoop: 1,
+            Labels.SingleLoop: 1,
             # Labels.CleanFirst: 1,
             Labels.CleanInSC: 1
         })
 
         self.set_label(int(strategy))
 
-        # if strategy == Labels.SingleLoop:
-        #     return SingleLoop().render()
+        if strategy == Labels.SingleLoop:
+            return SingleLoop().render()
         # elif strategy == Labels.CleanFirst:
         #     return CleanFirst().render()
-        if strategy == Labels.CleanInSC:
+        elif strategy == Labels.CleanInSC:
             return CleanInSC().render()
