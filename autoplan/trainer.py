@@ -9,7 +9,7 @@ from typing import List
 import numpy as np
 from tqdm.auto import tqdm
 import itertools
-from collections import ChainMap
+from collections import ChainMap, defaultdict
 import copy
 
 @dataclass
@@ -41,12 +41,14 @@ class ClassEvaluation:
         return plot_cm(plt.gca() if ax is None else ax,
                        title, self.confusion_matrix, self.classes, normalize)
 
-    def print_incorrect(self, dataset):
+    def print_incorrect(self, dataset, label_set=None):
+        label_set = label_set or dataset.label_set
         idxs = self.incorrect()
         for idx in idxs:
+            print(f'Program {idx}:')
             print(dataset.dataset[idx]['source'])
             print('Pred: {}\nTrue: {}'.format(
-                str(dataset.label_set[self.pred[idx]]), str(dataset.label_set[self.true[idx]])))
+                str(label_set[self.pred[idx]]), str(label_set[self.true[idx]])))
             print('='*30 + '\n')
 
 
@@ -161,7 +163,24 @@ class ParserTrainer(BaseTrainer):
     def __init__(self, dataset, split, device=None, batch_size=100, model_opts={}, val_frac=0.33, optim_opts={}):
         self.model = NeuralParser(dataset, device, **model_opts)
         self.optimizer = optim.Adam(self.model.parameters(), **optim_opts)
-        self.loss_fn = nn.CrossEntropyLoss(reduction='sum')
+
+        class_counts = defaultdict(lambda: defaultdict(int))
+        for item in dataset.dataset:
+            for choice_idx in item['trace']:
+                value_idx = item['choices'][choice_idx].item()
+                class_counts[choice_idx.item()][value_idx] += 1
+
+        class_balance = {
+            choice_idx: torch.tensor([counts[value_idx] / sum(counts.values())
+                                      for value_idx in sorted(counts.keys())])
+            for choice_idx, counts in class_counts.items()
+        }
+
+        self.loss_fns = {
+            k: nn.CrossEntropyLoss(reduction='sum', weight=1/class_balance[k])
+            for k in class_balance
+        }
+
         (self.train_dataset, self.train_loader), \
             (self.val_dataset, self.val_loader) = split.set_train_val(val_frac)
         self.dataset = dataset
@@ -189,7 +208,7 @@ class ParserTrainer(BaseTrainer):
                 for t in range(batch['trace_len'][batch_idx] - 1):
                     # [t+1] for start token
                     choice_idx = batch['trace'][batch_idx][t+1]
-                    loss += self.loss_fn(
+                    loss += self.loss_fns[choice_idx.item()](
                         preds[batch_idx][t].unsqueeze(0).cpu(),
                         batch['choices'][batch_idx][choice_idx].unsqueeze(0).cpu())
 

@@ -50,7 +50,7 @@ class ProgramEncoder(nn.Module):
         else:
             _, hidden = self.rnn(packed_input, h0)
 
-        return hidden.squeeze(0)
+        return hidden[-1]
 
 
 class ProgramClassifier(nn.Module):
