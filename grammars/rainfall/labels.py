@@ -43,3 +43,17 @@ class CountWhere(Labels):
     Helper = 0
     Rainfall = 1
     Own = 2
+    Multiple = 3
+
+    @classmethod
+    def from_string(cls, s):
+        if s == 'own':
+            return cls.Own
+        elif s == 'helper':
+            return cls.Helper
+        elif s == 'rainfall':
+            return cls.Rainfall
+        elif s == 'multiple':
+            return cls.Multiple
+        else:
+            raise Exception(f"Unknown label {s}")

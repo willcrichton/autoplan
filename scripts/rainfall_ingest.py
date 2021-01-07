@@ -5,7 +5,7 @@ import pickle
 from autoplan.dataset import build_prelabeled_dataset, PrelabeledDataset, concat_datasets
 from autoplan.token import OCamlTokenizer, PyretTokenizer, TokenizerError
 
-from grammars.rainfall.labels import GeneralRainfallLabels, DetailedRainfallLabels
+from grammars.rainfall.labels import GeneralRainfallLabels, DetailedRainfallLabels, CountWhere
 
 REPO_DIR = os.path.expanduser('~/autoplan')
 DATA_DIR = f'{REPO_DIR}/data/rainfall/raw'
@@ -99,7 +99,7 @@ def ingest_dataset(name, **kwargs):
         programs.append(src)
         plancodes.append(entry.Form)
         labels.append(general_label)
-        countwhere.append(entry.CountWhere)
+        countwhere.append(CountWhere.from_string(entry.CountWhere))
 
     assert len(programs) > 0
 
@@ -110,21 +110,24 @@ def ingest_dataset(name, **kwargs):
 def load_new_labels(vocab_index, **kwargs):
     name = 'T1'
     new_labels = pickle.load(open(f'{DATA_DIR}/{name}-newlabels.pkl', 'rb'))
+    new_countwhere = pickle.load(open(f'{DATA_DIR}/{name}-newlabels-countwhere-will.pkl', 'rb'))
     coding_csv = read_coding_csv(name)
     config = dataset_config[name]
     tokenizer = dataset_config[name]['tokenizer'](**kwargs)
 
     programs = []
     labels = []
+    countwhere = []
     for _, entry in coding_csv.iterrows():
         if entry.ID not in new_labels:
             continue
 
         programs.append(open(config['path'](entry.ID)).read())
         labels.append(new_labels[entry.ID])
+        countwhere.append(new_countwhere[entry.ID])
 
     return build_prelabeled_dataset(
-        GeneralRainfallLabels, programs, labels, None, tokenizer, vocab_index=vocab_index)
+        GeneralRainfallLabels, programs, labels, None, tokenizer, vocab_index=vocab_index, countwhere=countwhere)
 
 
 def load_full_t1(**kwargs):

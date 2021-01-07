@@ -88,11 +88,12 @@ class TrainValSplit:
 @dataclass
 class RandomSplit(TrainValSplit):
     dataset: TorchDataset
+    shuffle: bool = True
 
     def set_train_val(self, val_frac=0.33):
         N = len(self.dataset.dataset)
         val_size = int(N * val_frac)
-        return tuple(map(lambda ds: (ds, self.dataset.loader(ds, shuffle=True)),
+        return tuple(map(lambda ds: (ds, self.dataset.loader(ds, shuffle=self.shuffle)),
                          random_split(self.dataset.dataset, [N - val_size, val_size])))
 
 
