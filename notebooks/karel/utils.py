@@ -3,12 +3,14 @@ from javalang import tree
 import textwrap
 import os
 from pickle_cache import PickleCache
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from iterextras import par_for
 import copy
 from enum import Enum
-from typing import Dict, Union, Optional, List
+from typing import Dict, Union, Optional, List, Any
 from unionfind import UnionFind
+from torch.distributions import Categorical
+from torch import tensor as t
 
 pcache = PickleCache('.pcache')
 
@@ -197,33 +199,59 @@ class Predicate(Enum):
 
 class Op:
     pass
-    
-@dataclass(frozen=True)
+
+@dataclass
+class Sampled:
+    parts: List[Any]
+      
+    def __repr__(self):
+        return ';\n'.join([repr(p) for p in self.parts])    
+
+@dataclass
 class IfNode(Op):
     cond: Predicate
     then: str
     else_: Optional[str]
         
     def substitute(self, subs):
-        return IfNode(
-            cond=self.cond, 
+        return replace(self,
             then=subs.get(self.then, self.then), 
             else_=subs.get(self.else_, self.else_) if self.else_ is not None else None)
+ 
+    def refs(self):
+        return [self.then] + ([self.else_] if self.else_ is not None else [])
+    
+    def sample(self, grammar):
+        return replace(
+            self, 
+            then=grammar.productions[self.then].sample(grammar),
+            else_=grammar.productions[self.else_].sample(grammar) if self.else_ is not None else None)
         
     def __repr__(self):
-        return f'if ({repr(self.cond)}) {{ {repr(self.then)} }}'
+        return (f'if ({repr(self.cond)}) {{ {repr(self.then)} }}' + 
+            (f' else {{ {repr(self.else_)} }}' if self.else_ is not None else ''))
         
-@dataclass(frozen=True)
+@dataclass
 class WhileNode(Op):
     cond: Predicate
     body: str
         
     def substitute(self, subs):
-        return WhileNode(cond=self.cond, body=subs.get(self.body, self.body))
-        
-@dataclass(frozen=True)
-class Production:
-    rule: List[Union[str, Action, Op]]
+        return replace(self, body=subs.get(self.body, self.body))
+    
+    def refs(self):
+        return [self.body]
+    
+    def sample(self, grammar):
+        return replace(self, body=grammar.productions[self.body].sample(grammar))
+    
+    def __repr__(self):
+        return f'while ({repr(self.cond)}) {{ {repr(self.body)} }}'
+    
+@dataclass
+class Rule:
+    parts: List[Union[str, Action, Op]]    
+    prob: float
         
     def substitute(self, subs):
         def aux(r):
@@ -233,11 +261,66 @@ class Production:
                 return r.substitute(subs)
             else:
                 return r
-        return Production([aux(r) for r in self.rule])
+        return replace(self, parts=[aux(r) for r in self.parts])
     
-@dataclass(frozen=True)
+    def refs(self):
+        def aux(r):
+            if isinstance(r, str):
+                return [r]
+            elif isinstance(r, Op):
+                return r.refs()
+            else:
+                return []
+        return [ref for r in self.parts for ref in aux(r)]
+    
+    def sample(self, grammar):
+        def aux(r):
+            if isinstance(r, str):
+                return grammar.productions[r].sample(grammar)
+            elif isinstance(r, Op):
+                return r.sample(grammar)
+            else:
+                return r
+        return Sampled(parts=[aux(r) for r in self.parts])
+            
+@dataclass
+class Production:
+    rules: List[Rule]
+        
+    def substitute(self, subs):
+        return replace(self, rules=[r.substitute(subs) for r in self.rules])
+    
+    def refs(self):
+        return [ref for r in self.rules for ref in r.refs()]
+    
+    def sample(self, grammar):
+        dist = Categorical(t([r.prob for r in self.rules]))
+        return self.rules[dist.sample().item()].sample(grammar)
+
+@dataclass
 class Grammar:
     productions: Dict[str, Production]
+        
+    def sample(self):
+        return self.productions['start'].sample(self)        
+        
+    def expand(self, name):
+        prods = {name: self.productions[name]}
+        while True:
+            changed = False
+            to_add = {}
+            for rule in prods.values():
+                refs = rule.refs()
+                for ref in refs:
+                    if not ref in prods:
+                        to_add[ref] = self.productions[ref]
+                        changed = True
+                   
+            if changed:
+                prods = {**prods, **to_add}
+            else:
+                break
+        return prods
 
     def simplify(self):
         p = copy.deepcopy(self.productions)
@@ -292,10 +375,14 @@ class GrammarGenerator:
         
     def generate(self, stmt, name_hint=None):
         if isinstance(stmt, tree.IfStatement):
+            if stmt.else_statement is not None and not isinstance(stmt.else_statement, tree.BlockStatement):
+                else_ = tree.BlockStatement(statements=[stmt.else_statement])
+            else:
+                else_ = stmt.else_statement
             return IfNode(
                 cond=self.generate(stmt.condition),
                 then=self.generate(stmt.then_statement),
-                else_=None
+                else_=self.generate(else_) if else_ is not None else None
             )
         elif isinstance(stmt, tree.WhileStatement):
             return WhileNode(
@@ -303,9 +390,9 @@ class GrammarGenerator:
                 body=self.generate(stmt.body)
             )
         elif isinstance(stmt, tree.BlockStatement):
-            return self.add_production(Production(rule=[
+            return self.add_production(Production(rules=[Rule(parts=[
                 self.generate(s) for s in stmt.statements
-            ]), name_hint=name_hint)
+            ], prob=1.0)]), name_hint=name_hint)
         elif isinstance(stmt, tree.MethodInvocation):
             name = stmt.member
             
