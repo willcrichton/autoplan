@@ -96,7 +96,7 @@ class BaseTrainer:
             'loss': []
         }
 
-        it = tqdm(range(folds)) if progress else range(k)
+        it = tqdm(range(folds)) if progress else range(folds)
         for fold in it:
             cls.crossval_helper(all_eval, dataset, epochs, *args, **kwargs)
         return all_eval

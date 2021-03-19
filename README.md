@@ -4,6 +4,7 @@ Autoplan is a Python library for using machine learning to classify programs int
 
 To see how to use Autoplan, check out our demo Jupyter notebook: https://github.com/willcrichton/autoplan/blob/master/notebooks/autoplan_demo.ipynb
 
+If you are interested in using Autoplan, feel free to contact the authors at wcrichto@cs.stanford.edu and gsamp@stanford.edu.
 
 ## Installation
 
