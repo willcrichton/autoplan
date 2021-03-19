@@ -5,8 +5,9 @@ import json
 from iterextras import par_for, unzip
 from enum import Enum
 import re
+import traceback
 
-class TokenizerError(Exception):
+class ParserError(Exception):
     pass
 
 
@@ -16,7 +17,7 @@ class TokenType(Enum):
     String = 2
 
 
-class Tokenizer:
+class Parser:
     def __init__(self, exclude=[TokenType.String, TokenType.Number, TokenType.Identifier],
                  preprocess=True):
         self.exclude = exclude
@@ -82,7 +83,7 @@ class Tokenizer:
             program_string, stderr = self._call_process(dir_name, 'preprocess.sh',
                                                         program_string)
             if check_stderr and stderr != '':
-                raise TokenizerError(program_string, stderr)
+                raise ParserError(program_string, stderr)
 
         token_json, stderr = self._call_process(dir_name, 'tokenize.sh', program_string)
         token_json = token_json.replace("\\", "\\\\")
@@ -90,16 +91,16 @@ class Tokenizer:
         try:
             return json.loads(token_json), program_string
         except json.JSONDecodeError:
-            raise TokenizerError(token_json, stderr)
+            raise ParserError(token_json, stderr)
 
     def parse(self, program_string):
         stdout, stderr = self._parse(program_string)
         if stderr.strip() != '':
-            raise TokenizerError(program_string, stderr)
+            raise ParserError(program_string, stderr)
         return json.loads(stdout)
 
 
-class JavaTokenizer(Tokenizer):
+class JavaParser(Parser):
     def _token_types(self):
         import javalang.tokenizer as tokenizer
         return {
@@ -108,12 +109,35 @@ class JavaTokenizer(Tokenizer):
             tokenizer.Integer: TokenType.Number
         }
 
+    def _parse(self, program_string):
+        import javalang.parse as parser
+        from javalang.ast import walk_tree, Node
+
+        def to_json(node):
+            if isinstance(node, Node):
+                attrs = []
+                for k in node.attrs:
+                    rec = to_json(getattr(node, k))
+                    if len(rec) > 0 and rec[0] != None:
+                        attrs.append([k] + rec)
+                return [node.__class__.__name__] + attrs
+            elif isinstance(node, (list, set)):
+                return [to_json(x) for x in node]
+            else:
+                return [node]
+
+        try:
+            tree = parser.parse(program_string)
+            return json.dumps(to_json(tree)), ''
+        except Exception:
+            return None, traceback.format_exc()
+
     def _tokenize(self, program_string):
         import javalang.tokenizer as tokenizer
         tokens = tokenizer.tokenize(program_string)
-        return map(lambda token: (type(token), token.value)), program_string
+        return map(lambda token: (type(token), token.value), tokens), program_string
 
-class OCamlTokenizer(Tokenizer):
+class OCamlParser(Parser):
     def _token_types(self):
         return {
             'LIDENT': TokenType.Identifier,
@@ -129,7 +153,7 @@ class OCamlTokenizer(Tokenizer):
         return map(tuple, tokens), program
 
 
-class PyretTokenizer(Tokenizer):
+class PyretParser(Parser):
     def _token_types(self):
         return {
             'NAME': TokenType.Identifier,

@@ -54,7 +54,7 @@ class ClassEvaluation:
 
 class BaseTrainer:
     def eval(self):
-        return self.eval_on(self.train_loader), self.eval_on(self.val_loader)
+        return self.eval_on(self.train_loader), self.eval_on(self.test_loader)
 
     def eval_on(self, loader):
         self.model.eval()
@@ -66,29 +66,37 @@ class BaseTrainer:
         iterator = tqdm(range(epochs)) if progress else range(epochs)
         losses = []
         train_eval = []
-        val_eval = []
+        test_eval = []
         state = []
 
         for _ in iterator:
             loss = self.train_one_epoch()
             losses.append(loss)
-            train, val = self.eval()
+            train, test = self.eval()
             train_eval.append(train)
-            val_eval.append(val)
+            test_eval.append(test)
             state.append(copy.deepcopy(self.model.state_dict()))
 
-        return losses, train_eval, val_eval, state
+        return losses, train_eval, test_eval, state
+
+    def train_and_load_best(self, **kwargs):
+        losses, train_eval, test_eval, state = self.train(**kwargs)
+
+        best = np.argmax([evl.accuracy for evl in test_eval])
+        self.model.load_state_dict(state[best])
+
+        return losses, train_eval, test_eval, state
 
     @classmethod
-    def crossval(cls, dataset, epochs, *args, k=1, progress=False, **kwargs):
+    def crossval(cls, dataset, epochs, *args, folds=1, progress=False, **kwargs):
         all_eval = {
             'accuracy': [],
             'train_eval': [],
-            'val_eval': [],
+            'test_eval': [],
             'loss': []
         }
 
-        it = tqdm(range(k)) if progress else range(k)
+        it = tqdm(range(folds)) if progress else range(k)
         for fold in it:
             cls.crossval_helper(all_eval, dataset, epochs, *args, **kwargs)
         return all_eval
@@ -97,15 +105,15 @@ class BaseTrainer:
     @classmethod
     def crossval_helper(cls, all_eval, dataset, epochs, *args, progress=False, **kwargs):
         trainer = cls(dataset, *args, **kwargs)
-        loss, train_eval, val_eval, _ = trainer.train(epochs, progress=False)
-        all_eval['accuracy'].append(max([eval_.accuracy for eval_ in val_eval]))
+        loss, train_eval, test_eval, _ = trainer.train(epochs, progress=False)
+        all_eval['accuracy'].append(max([eval_.accuracy for eval_ in test_eval]))
         all_eval['train_eval'].append(train_eval)
-        all_eval['val_eval'].append(val_eval)
+        all_eval['test_eval'].append(test_eval)
         all_eval['loss'].append(loss)
 
 
 class ClassifierTrainer(BaseTrainer):
-    def __init__(self, dataset, device=None, batch_size=100, val_frac=0.33, split=None, model_opts={},
+    def __init__(self, dataset, device=None, batch_size=100, test_frac=0.33, split=None, model_opts={},
                  optim_opts={}):
         self.device = device if device is not None else torch.device('cpu')
 
@@ -122,7 +130,7 @@ class ClassifierTrainer(BaseTrainer):
         # Convert datasets into data loaders to fetch batches of sequences
         self.dataset = dataset
         (self.train_dataset, self.train_loader), \
-            (self.val_dataset, self.val_loader) = split.set_train_val(val_frac)
+            (self.test_dataset, self.test_loader) = split.set_train_test(test_frac)
         self.class_names = [str(cls).split('.')[1] for cls in dataset.label_set]
 
     def train_one_epoch(self):
@@ -150,6 +158,12 @@ class ClassifierTrainer(BaseTrainer):
                                 program_len=program_len)
         return pred_label.topk(1, dim=1)[1].squeeze(-1).cpu()
 
+    def classify(self, program):
+        _1, _2, tokens, _3 = self.dataset.parser.tokenize_all([program], vocab_index=self.dataset.vocab_index)
+        tokens = tokens[0]
+        label = self.predict(tokens.unsqueeze(0), torch.tensor([len(tokens)])).item()
+        return self.dataset.label_set[label]
+
     def _eval_on(self, loader):
         true = []
         pred = []
@@ -160,7 +174,7 @@ class ClassifierTrainer(BaseTrainer):
 
 
 class ParserTrainer(BaseTrainer):
-    def __init__(self, dataset, split, device=None, batch_size=100, model_opts={}, val_frac=0.33, optim_opts={}):
+    def __init__(self, dataset, split, device=None, batch_size=100, model_opts={}, test_frac=0.33, optim_opts={}):
         self.model = NeuralParser(dataset, device, **model_opts)
         self.optimizer = optim.Adam(self.model.parameters(), **optim_opts)
 
@@ -182,7 +196,7 @@ class ParserTrainer(BaseTrainer):
         }
 
         (self.train_dataset, self.train_loader), \
-            (self.val_dataset, self.val_loader) = split.set_train_val(val_frac)
+            (self.test_dataset, self.test_loader) = split.set_train_test(test_frac)
         self.dataset = dataset
         self.label_names = {
             k: [self._truncate(str(name)) for _, name in dataset.choices[k]]
@@ -222,7 +236,7 @@ class ParserTrainer(BaseTrainer):
     def _eval_on(self, loader):
         choice_true = defaultdict(list)
         choice_pred = defaultdict(list)
-        for batch in self.val_loader:
+        for batch in self.test_loader:
             pred_choices = self.model.predict(
                 batch['program'], batch['program_len'], batch['trace'], batch['trace_len'], batch['choices'])
             true_choices = torch.tensor([

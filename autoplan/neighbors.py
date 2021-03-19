@@ -5,10 +5,9 @@ from iterextras import par_for
 from .trainer import ClassEvaluation
 from scipy.stats import mode
 from .dataset import RandomSplit
-from .token import TokenizerError
+from .parser import ParserError
 from torch.utils.data import Subset
 import dataclasses
-import nltk
 
 def compute_tree_distance(tup):
     (trees, other_trees, i) = tup
@@ -17,15 +16,15 @@ def compute_tree_distance(tup):
 
 
 def compute_token_distance(tup):
+    import nltk
     (tokens, other_tokens, i) = tup
     dists = np.array([nltk.edit_distance(other_tokens[i], t) for t in tokens])
     return dists
 
 
 class NNClassifier:
-    def __init__(self, dataset, tokenizer):
+    def __init__(self, dataset):
         self.dataset = dataset
-        self.tokenizer = tokenizer
         self.class_names = [str(cls).split('.')[1] for cls in self.dataset.label_set]
         self.programs, self.dataset = self.compute_programs(self.dataset)
 
@@ -39,19 +38,19 @@ class NNClassifier:
     def nearest(self, i, dists):
         return self.dataset.dataset[np.argsort(dists[i, :])[1]]
 
-    def crossval(self, dists, folds=10, k=1, val_frac=0.33):
+    def crossval(self, dists, folds=10, k=1, test_frac=0.33):
         N = len(self.programs)
-        Ntrain = int(N * (1-val_frac))
+        Ntrain = int(N * (1-test_frac))
         evals = []
-        val = []
+        test = []
         closest = []
         for i in range(folds):
             idxs = np.random.permutation(N)
-            train_idx, val_idx = (idxs[:Ntrain], idxs[Ntrain:])
-            true = [self.dataset.dataset[i]['labels'].item() for i in val_idx]
+            train_idx, test_idx = (idxs[:Ntrain], idxs[Ntrain:])
+            true = [self.dataset.dataset[i]['labels'].item() for i in test_idx]
             close = [
                 train_idx[np.argsort(dists[i, train_idx])[:k]]
-                for i in val_idx
+                for i in test_idx
             ]
             pred = [
                 mode([self.dataset.dataset[j]['labels'].item() for j in cl])[0][0]
@@ -59,8 +58,8 @@ class NNClassifier:
             ]
             evals.append(ClassEvaluation.from_preds(true, pred, self.class_names))
             closest.append(close)
-            val.append(val_idx)
-        return evals, closest, val
+            test.append(test_idx)
+        return evals, closest, test
 
     def eval(self, dataset, mtx, k=1):
         N = len(dataset.dataset)
@@ -70,6 +69,14 @@ class NNClassifier:
         pred = [mode(n[:k])[0][0] for t, n in zip(true, near)]
 
         return ClassEvaluation.from_preds(true, pred, self.class_names)
+
+    def classify(self, program):
+        program = self.prepare(program)
+        metric = self.metric()
+        dists = metric((self.programs, [program], 0))
+        closest = self.dataset.dataset[np.argmin(dists)]
+        label = closest['labels']
+        return self.dataset.label_set[label.item()]
 
 
 class TreeNNClassifier(NNClassifier):
@@ -93,15 +100,19 @@ class TreeNNClassifier(NNClassifier):
 
         return prog
 
+    def prepare(self, program):
+        return self.json_to_tree(self.dataset.parser.parse(program))
+
     def compute_programs(self, dataset):
         bad = []
         asts = []
 
         def parse(item):
             try:
-                return self.tokenizer.parse(item['source'])
-            except TokenizerError:
+                return self.dataset.parser.parse(item['source'])
+            except ParserError:
                 return None
+
         maybe_asts = par_for(parse, dataset.dataset)
         asts = [ast for ast in maybe_asts if ast is not None]
         bad = [i for i, ast in enumerate(maybe_asts) if ast is None]
@@ -119,3 +130,7 @@ class TokenNNClassifier(NNClassifier):
 
     def compute_programs(self, dataset):
         return [item['program'] for item in dataset.dataset], dataset
+
+    def prepare(self, program):
+        _1, _2, tokens, _3 = self.dataset.parser.tokenize_all([program], vocab_index=self.dataset.vocab_index)
+        return tokens[0]

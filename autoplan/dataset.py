@@ -1,5 +1,7 @@
 from .labels import Labels
 from .generator import ProgramGenerator
+from .parser import Parser
+
 import torch
 from torch import tensor
 from torch.utils.data import Dataset as TorchDataset, DataLoader, random_split
@@ -21,6 +23,7 @@ class BaseDataset:
     vocab_size: int
     vocab_index: Dict[str, int]
     label_set: Labels
+    parser: Parser
 
     def class_balance(self):
         labels = np.array([item['labels'].item() for item in self.dataset])
@@ -78,36 +81,36 @@ class SyntheticDataset(BaseDataset):
 
 
 @dataclass
-class PrelabeledDataset(BaseDataset):
+class LabeledDataset(BaseDataset):
     pass
 
-class TrainValSplit:
-    def set_train_val(self, val_frac):
+class TrainTestSplit:
+    def set_train_test(self, test_frac):
         raise NotImplementedError
 
 @dataclass
-class RandomSplit(TrainValSplit):
+class RandomSplit(TrainTestSplit):
     dataset: TorchDataset
     shuffle: bool = True
 
-    def set_train_val(self, val_frac=0.33):
+    def set_train_test(self, test_frac=0.33):
         N = len(self.dataset.dataset)
-        val_size = int(N * val_frac)
+        test_size = int(N * test_frac)
         return tuple(map(lambda ds: (ds, self.dataset.loader(ds, shuffle=self.shuffle)),
-                         random_split(self.dataset.dataset, [N - val_size, val_size])))
+                         random_split(self.dataset.dataset, [N - test_size, test_size])))
 
 
 @dataclass
-class TrainVal(TrainValSplit):
+class TrainVal(TrainTestSplit):
     dataset: TorchDataset
-    val_dataset: TorchDataset
+    test_dataset: TorchDataset
 
-    def set_train_val(self, val_frac=None):
+    def set_train_test(self, test_frac=None):
         return (self.dataset.dataset, self.dataset.loader(self.dataset.dataset, shuffle=True)), \
-                (self.val_dataset.dataset, self.val_dataset.loader(self.val_dataset.dataset))
+                (self.test_dataset.dataset, self.test_dataset.loader(self.test_dataset.dataset))
 
 
-def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None, unique=False):
+def build_synthetic_dataset(label_set, N, parser, generator, vocab_index=None, unique=False):
     if unique:
         programs = []
         choices = []
@@ -126,7 +129,7 @@ def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None
         programs, choices, choice_options, labels = unzip([generator.generate() for _ in range(N)])
 
     # Grammar parser
-    tokens, token_to_index, token_indices, new_programs = tokenizer.tokenize_all(programs, vocab_index)
+    tokens, token_to_index, token_indices, new_programs = parser.tokenize_all(programs, vocab_index)
 
     for prog, tok in zip(programs, tokens):
         if len(tok) == 0:
@@ -152,22 +155,24 @@ def build_synthetic_dataset(label_set, N, tokenizer, generator, vocab_index=None
         vocab_index=token_to_index,
         label_set=label_list,
         choices=all_choices,
-        choice_indices=choice_indices)
+        choice_indices=choice_indices,
+        parser=parser)
 
 
-def build_prelabeled_dataset(label_set, programs, labels, codes, tokenizer, countwhere=None, vocab_index=None):
-    tokens, token_to_index, token_indices, programs = tokenizer.tokenize_all(
+def build_labeled_dataset(label_set, programs, labels, parser, codes=None, countwhere=None, vocab_index=None):
+    tokens, token_to_index, token_indices, programs = parser.tokenize_all(
         programs, vocab_index=vocab_index)
     vocab_size = len(token_to_index)
 
     label_list = list(label_set)
     program_labels = [torch.tensor(int(prog_label), dtype=torch.long) for prog_label in labels]
 
-    return PrelabeledDataset(
+    return LabeledDataset(
         dataset=ProgramDataset(programs, token_indices, program_labels, codes=codes, countwhere=countwhere),
         vocab_size=vocab_size,
         vocab_index=token_to_index,
-        label_set=label_list)
+        label_set=label_list,
+        parser=parser)
 
 
 class ProgramDataset(TorchDataset):
