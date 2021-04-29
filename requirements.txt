@@ -3,3 +3,5 @@ pandas
 tqdm
 matplotlib
 seaborn
+javalang
+pickle-cache

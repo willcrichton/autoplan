@@ -14,14 +14,15 @@ from torch import tensor as t
 
 pcache = PickleCache('.pcache')
 
-DATA_DIR = '../../data/cs106a/CheckerboardKarel_anonymized'
+DATA_DIR = '../../data/cs106a/CheckerboardKarel/CheckerboardKarel_anonymized'
+GRADES_DIR = '../../data/cs106a/CheckerboardKarel/CheckerboardKarel_results'
 STUDENTS = os.listdir(DATA_DIR)
 
 @dataclass
 class Program:
     source: str
     ast: tree.CompilationUnit
-        
+
 def load_student_programs(student):
     files = sorted(os.listdir(f'{DATA_DIR}/{student}'))
     programs = []
@@ -36,11 +37,23 @@ def load_student_programs(student):
 
 def get_solutions():
     def load():
-        solutions = {}    
+        solutions = {}
         progs = par_for(load_student_programs, STUDENTS, process=True)
         return {k: v for k, v in zip(STUDENTS, progs)}
 
     return pcache.get('solutions', load)
+
+def parse_grade(inp):
+    fns = inp.split('----------------------------------------------')
+    print(fns)
+    return
+
+def load_student_grades(student, board):
+    base_dir = f'{GRADES_DIR}/{board}/{student}'
+    files = sorted(os.listdir(base_dir))
+    return [parse_grade(open(f'{base_dir}/{f}').read()) for f in files]
+
+
 
 class Visitor:
     def visit(self, node):
@@ -61,7 +74,7 @@ class Transformer:
     def visit(self, node):
         visitor = getattr(self, f'visit_{node.__class__.__name__}', self.generic_visit)
         return visitor(node)
-    
+
     def generic_visit(self, node):
         for field in node.attrs:
             old_value = getattr(node, field)
@@ -84,7 +97,7 @@ class Transformer:
                 else:
                     setattr(node, field, new_node)
         return node
-    
+
 
 def expr_to_string(e):
     if isinstance(e, tree.MethodInvocation):
@@ -94,7 +107,7 @@ def expr_to_string(e):
     else:
         raise Exception(f'Unknown expression {type(e)})')
 
-    
+
 def stmt_to_string(s, indent=0):
     if isinstance(s, list):
         return '\n'.join([stmt_to_string(s2) for s2 in s])
@@ -116,17 +129,17 @@ def stmt_to_string(s, indent=0):
         return 'break;'
     else:
         raise Exception(f'Unknown type {type(s)}')
-        
+
 def stmts_to_string(ss):
     return '\n'.join([stmt_to_string(s) for s in ss])
 
 def fun_to_string(f):
     body = stmt_to_string(tree.BlockStatement(statements=f.body))
     return f'void {f.name}() {body}'
-        
+
 
 def get_methods(soln):
-    cdecl = next(c[0] for c in soln.ast.children 
+    cdecl = next(c[0] for c in soln.ast.children
                  if isinstance(c, list) and isinstance(c[0], tree.ClassDeclaration))
     return {method.name: method for method in cdecl.methods}
 
@@ -134,7 +147,7 @@ def get_methods(soln):
 class Inline(Transformer):
     def __init__(self, methods):
         self.methods = methods
-        
+
     def visit_StatementExpression(self, s):
         if isinstance(s.expression, tree.MethodInvocation):
             fname = s.expression.member
@@ -143,7 +156,7 @@ class Inline(Transformer):
                 return self.visit(fdef).body
         return s
 
-    
+
 class TreeSize(Visitor):
     def __init__(self):
         self.size = 0
@@ -159,7 +172,7 @@ def tree_size(node):
     return visitor.size
 
 
-class Action(Enum): 
+class Action(Enum):
     move = 1
     turnRight = 2
     turnLeft = 3
@@ -168,10 +181,10 @@ class Action(Enum):
     pickBeeper = 6
     paintCorner = 7
     stop = 8
-    
+
     def __repr__(self):
         return str(self).split('.')[-1] + '()'
-    
+
 class Predicate(Enum):
     frontIsClear = 1
     rightIsClear = 2
@@ -192,67 +205,82 @@ class Predicate(Enum):
     notFacingSouth = 17
     notFacingWest = 18
     cornerColorIs = 19
-    
+
     def __repr__(self):
         return str(self).split('.')[-1] + '()'
-    
+
 
 class Op:
     pass
 
 @dataclass
-class Sampled:
+class Block:
     parts: List[Any]
-      
+
     def __repr__(self):
-        return ';\n'.join([repr(p) for p in self.parts])    
+        return ';\n'.join([repr(p) for p in self.parts])
 
 @dataclass
 class IfNode(Op):
     cond: Predicate
     then: str
     else_: Optional[str]
-        
+
+    def children(self):
+        if self.else_:
+            return [self.then, self.else_]
+        else:
+            return [self.then]
+
     def substitute(self, subs):
         return replace(self,
-            then=subs.get(self.then, self.then), 
+            then=subs.get(self.then, self.then),
             else_=subs.get(self.else_, self.else_) if self.else_ is not None else None)
- 
+
     def refs(self):
         return [self.then] + ([self.else_] if self.else_ is not None else [])
-    
+
     def sample(self, grammar):
         return replace(
-            self, 
+            self,
             then=grammar.productions[self.then].sample(grammar),
             else_=grammar.productions[self.else_].sample(grammar) if self.else_ is not None else None)
-        
+
     def __repr__(self):
-        return (f'if ({repr(self.cond)}) {{ {repr(self.then)} }}' + 
-            (f' else {{ {repr(self.else_)} }}' if self.else_ is not None else ''))
-        
+        return (f'''if ({repr(self.cond)}) {{
+{textwrap.indent(repr(self.then), '  ')}
+}}''' + (f''' else {{
+{textwrap.indent(repr(self.else_), '  ')}
+}}''' if self.else_ is not None else ''))
+
+
 @dataclass
 class WhileNode(Op):
     cond: Predicate
     body: str
-        
+
+    def children(self):
+        return [self.body]
+
     def substitute(self, subs):
         return replace(self, body=subs.get(self.body, self.body))
-    
+
     def refs(self):
         return [self.body]
-    
+
     def sample(self, grammar):
         return replace(self, body=grammar.productions[self.body].sample(grammar))
-    
+
     def __repr__(self):
-        return f'while ({repr(self.cond)}) {{ {repr(self.body)} }}'
-    
+        return f'''while ({repr(self.cond)}) {{
+{textwrap.indent(repr(self.body), '  ')}
+}}'''
+
 @dataclass
 class Rule:
-    parts: List[Union[str, Action, Op]]    
+    parts: List[Union[str, Action, Op]]
     prob: float
-        
+
     def substitute(self, subs):
         def aux(r):
             if isinstance(r, str):
@@ -262,7 +290,7 @@ class Rule:
             else:
                 return r
         return replace(self, parts=[aux(r) for r in self.parts])
-    
+
     def refs(self):
         def aux(r):
             if isinstance(r, str):
@@ -272,7 +300,7 @@ class Rule:
             else:
                 return []
         return [ref for r in self.parts for ref in aux(r)]
-    
+
     def sample(self, grammar):
         def aux(r):
             if isinstance(r, str):
@@ -281,18 +309,18 @@ class Rule:
                 return r.sample(grammar)
             else:
                 return r
-        return Sampled(parts=[aux(r) for r in self.parts])
-            
+        return Block(parts=[aux(r) for r in self.parts])
+
 @dataclass
 class Production:
     rules: List[Rule]
-        
+
     def substitute(self, subs):
         return replace(self, rules=[r.substitute(subs) for r in self.rules])
-    
+
     def refs(self):
         return [ref for r in self.rules for ref in r.refs()]
-    
+
     def sample(self, grammar):
         dist = Categorical(t([r.prob for r in self.rules]))
         return self.rules[dist.sample().item()].sample(grammar)
@@ -300,10 +328,10 @@ class Production:
 @dataclass
 class Grammar:
     productions: Dict[str, Production]
-        
+
     def sample(self):
-        return self.productions['start'].sample(self)        
-        
+        return self.productions['start'].sample(self)
+
     def expand(self, name):
         prods = {name: self.productions[name]}
         while True:
@@ -315,7 +343,7 @@ class Grammar:
                     if not ref in prods:
                         to_add[ref] = self.productions[ref]
                         changed = True
-                   
+
             if changed:
                 prods = {**prods, **to_add}
             else:
@@ -338,11 +366,11 @@ class Grammar:
                         to_delete.add(k2)
                         uf.union(k1, k2)
                         changed = True
-                        
+
             p = {**p, **to_add}
             for k in to_delete:
                 del p[k]
-                
+
             if not changed:
                 break
             else:
@@ -351,16 +379,17 @@ class Grammar:
             k: uf.component(k)
             for k in p.keys()
         }
-    
+
 class Unimplemented(Exception):
     pass
 
 class GrammarGenerator:
-    def __init__(self, student, methods):
-        self.productions = {} 
+    def __init__(self, student, methods, grammar=True):
+        self.productions = {}
         self.methods = methods
         self.student = student
-        
+        self.grammar = grammar
+
     def add_production(self, production, name_hint=None):
         existing = [k for k, p in self.productions.items() if p == production]
         if len(existing) > 0:
@@ -372,7 +401,7 @@ class GrammarGenerator:
                 name = f'{self.student}_rule{len(self.productions)}'
             self.productions[name] = production
             return name
-        
+
     def generate(self, stmt, name_hint=None):
         if isinstance(stmt, tree.IfStatement):
             if stmt.else_statement is not None and not isinstance(stmt.else_statement, tree.BlockStatement):
@@ -390,14 +419,19 @@ class GrammarGenerator:
                 body=self.generate(stmt.body)
             )
         elif isinstance(stmt, tree.BlockStatement):
-            return self.add_production(Production(rules=[Rule(parts=[
-                self.generate(s) for s in stmt.statements
-            ], prob=1.0)]), name_hint=name_hint)
+            parts = [self.generate(s) for s in stmt.statements]
+            parts = [
+                p for part in parts for p in (part.parts if isinstance(part, Block) else [part])
+            ]
+            if self.grammar:
+                return self.add_production(Production(rules=[Rule(parts=parts, prob=1.0)]), name_hint=name_hint)
+            else:
+                return Block(parts)
         elif isinstance(stmt, tree.MethodInvocation):
             name = stmt.member
-            
-            if name in self.methods:                
-                return self.generate(self.methods[name])            
+
+            if name in self.methods:
+                return self.generate(self.methods[name])
             elif hasattr(Action, name):
                 return Action[name]
             else:

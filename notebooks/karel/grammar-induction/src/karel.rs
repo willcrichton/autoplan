@@ -1,54 +1,94 @@
 use super::grammar::{LabeledTree, Nonterminal, SelfRef};
+use pyo3::prelude::*;
+use serde::Deserialize;
 use std::any::{Any, TypeId};
 use std::fmt;
 use std::iter;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum Action {
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(tag = "type")]
+pub enum Action {
   Move,
   TurnRight,
+  TurnLeft,
+  TurnAround,
+  PutBeeper,
+  PickBeeper,
+  PaintCorner,
+  Stop,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum Predicate {
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(tag = "type")]
+pub enum Predicate {
   FrontIsClear,
   RightIsClear,
+  LeftIsClear,
+  FrontIsBlocked,
+  LeftIsBlocked,
+  RightIsBlocked,
+  BeepersPresent,
+  NoBeepersPresent,
+  BeepersInBag,
+  NoBeepersInBag,
+  FacingNorth,
+  FacingEast,
+  FacingSouth,
+  FacingWest,
+  NotFacingNorth,
+  NotFacingEast,
+  NotFacingSouth,
+  NotFacingWest,
+  CornerColorIs,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Deserialize)]
+#[serde(tag = "type")]
 pub enum Statement {
-  Action(Action),
-  If(Predicate, SelfRef<Statement>, Option<SelfRef<Statement>>),
-  While(Predicate, SelfRef<Statement>),
-  Seq(SelfRef<Statement>, SelfRef<Statement>),
+  Action {
+    action: Action,
+  },
+  If {
+    pred: Predicate,
+    then_: SelfRef<Statement>,
+    else_: Option<SelfRef<Statement>>,
+  },
+  While {
+    pred: Predicate,
+    body: SelfRef<Statement>,
+  },
+  Seq {
+    first: SelfRef<Statement>,
+    second: SelfRef<Statement>,
+  },
 }
 
 impl fmt::Debug for Statement {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     use Statement::*;
     match self {
-      Action(action) => write!(f, "{:?}", action)?,
-      If(predicate, then_, else_) => {
-        write!(f, "if ({:?}) {{ {:?} }}", predicate, then_)?;
+      Action { action } => write!(f, "{:?}", action)?,
+      If { pred, then_, else_ } => {
+        write!(f, "if ({:?}) {{ {:?} }}", pred, then_)?;
         if let Some(else_) = else_ {
           write!(f, " else {{ {:?} }}", else_)?
         }
       }
-      While(predicate, body) => write!(f, "while ({:?}) {{ {:?} }}", predicate, body)?,
-      Seq(s1, s2) => write!(f, "{:?}; {:?}", s1, s2)?,
+      While { pred, body } => write!(f, "while ({:?}) {{ {:?} }}", pred, body)?,
+      Seq { first, second } => write!(f, "{:?}; {:?}", first, second)?,
     };
     Ok(())
   }
 }
 
 impl LabeledTree for Statement {
-  fn matches(&self, other: &Self) -> bool {
+  fn label_matches(&self, other: &Self) -> bool {
     use Statement::*;
     match (self, other) {
-      (Action(action1), Action(action2)) => action1 == action2,
-      (If(pred1, _, _), If(pred2, _, _)) => pred1 == pred2,
-      (While(pred1, _), While(pred2, _)) => pred1 == pred2,
-      (Seq(_, _), Seq(_, _)) => true,
+      (Action { action: action1 }, Action { action: action2 }) => action1 == action2,
+      (If { pred: pred1, .. }, If { pred: pred2, .. }) => pred1 == pred2,
+      (While { pred: pred1, .. }, While { pred: pred2, .. }) => pred1 == pred2,
+      (Seq { .. }, Seq { .. }) => true,
       _ => false,
     }
   }
@@ -56,45 +96,85 @@ impl LabeledTree for Statement {
   fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SelfRef<Self>> + 'a> {
     use Statement::*;
     match self {
-      Action(_) => Box::new(iter::empty()),
-      If(_, then_, else_) => Box::new(iter::once(then_).chain(else_.iter())),
-      While(_, body) => Box::new(iter::once(body)),
-      Seq(s1, s2) => Box::new(iter::once(s1).chain(iter::once(s2))),
+      Action { .. } => Box::new(iter::empty()),
+      If { then_, else_, .. } => Box::new(iter::once(then_).chain(else_.iter())),
+      While { body, .. } => Box::new(iter::once(body)),
+      Seq { first, second } => Box::new(iter::once(first).chain(iter::once(second))),
     }
   }
 
   fn children_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut SelfRef<Self>> + 'a> {
     use Statement::*;
     match self {
-      Action(_) => Box::new(iter::empty()),
-      If(_, then_, else_) => Box::new(iter::once(then_).chain(else_.iter_mut())),
-      While(_, body) => Box::new(iter::once(body)),
-      Seq(s1, s2) => Box::new(iter::once(s1).chain(iter::once(s2))),
+      Action { .. } => Box::new(iter::empty()),
+      If { then_, else_, .. } => Box::new(iter::once(then_).chain(else_.iter_mut())),
+      While { body, .. } => Box::new(iter::once(body)),
+      Seq { first, second } => Box::new(iter::once(first).chain(iter::once(second))),
     }
   }
 }
 
 #[test]
-fn test() {
-  use super::grammar::Grammar;
+fn json() {
+  use super::grammar::GrammarLearner;
+  use std::{fs::File, io::BufReader};
 
-  let prog = Statement::Seq(
-    SelfRef::Concrete(Box::new(Statement::Action(Action::Move))),
-    SelfRef::Concrete(Box::new(Statement::If(
-      Predicate::FrontIsClear,
-      SelfRef::Concrete(Box::new(Statement::Action(Action::Move))),
-      None,
-    ))),
-  );
-  let grammar = Grammar::build_lgcg(vec![prog.clone()]);
-  println!("{:#?}", grammar);
-  println!(
-    "{:?}",
-    grammar
-      .parse(&prog)
-      .into_iter()
-      .map(|p| p.exp())
-      .collect::<Vec<_>>()
-  );
-  println!("grammar prior {:?}, data likelihood {:?}", grammar.grammar_prior().exp(), grammar.data_likelihood().exp());
+  let file = File::open("../progs.json").unwrap();
+  let reader = BufReader::new(file);
+  let progs: Vec<Statement> = serde_json::from_reader(reader).unwrap();
+
+  let mut learner = GrammarLearner::build_lgcg(progs[..10].to_vec());
+  learner.mcmc(100);
 }
+
+// #[test]
+// fn test() {
+//   use super::grammar::GrammarLearner;
+
+//   let progs = vec![
+//     Statement::Seq(
+//       SelfRef::Concrete(Box::new(Statement::Action(Action::Move))),
+//       SelfRef::Concrete(Box::new(Statement::If(
+//         Predicate::FrontIsClear,
+//         SelfRef::Concrete(Box::new(Statement::Action(Action::Move))),
+//         None,
+//       ))),
+//     ),
+//     Statement::If(
+//       Predicate::FrontIsClear,
+//       SelfRef::Concrete(Box::new(Statement::Action(Action::TurnRight))),
+//       None,
+//     ),
+//   ];
+//   let mut learner = GrammarLearner::build_lgcg(progs.clone());
+
+//   macro_rules! debug {
+//     () => {
+//       println!("{:#?}", learner.grammar);
+//       println!("{:.3?}", learner.grammar.parse(&progs[0], &mut None).exp());
+//       // println!(
+//       //   "learner prior {:.3?}, data likelihood {:.3?}",
+//       //   learner.grammar_prior().exp(),
+//       //   learner.data_likelihood().exp()
+//       // );
+//       println!("=========");
+//     };
+//   };
+
+//   debug!();
+//   learner.mcmc(1000);
+//   //debug!();
+
+//   //debug!();
+//   // println!("{:.3?}", learner.structure_prior());
+//   // learner.merge_random();
+//   // learner.update_params();
+//   // println!("{:.3?}", learner.structure_prior());
+//   // debug!();
+//   // learner.merge_random();
+//   // learner.update_params();
+//   // debug!();
+//   // learner.split_random();
+//   // learner.update_params();
+//   // debug!();
+// }
