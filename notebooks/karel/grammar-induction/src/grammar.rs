@@ -277,7 +277,7 @@ impl<T: LabeledTree> Grammar<T> {
     Nonterminal(n)
   }
 
-  pub fn parse(&self, tree: &T) -> Option<(f64, HashMap<Nonterminal, Vec<usize>>)> {
+  pub fn parse(&self, tree: &T) -> Option<(f64, HashMap<Nonterminal, SmallVec<[usize; 16]>>)> {
     let (levels, indices) = tree.flatten();
     // println!("levels: {:#?}", levels);
     // println!("indices: {:?}", indices);
@@ -286,7 +286,7 @@ impl<T: LabeledTree> Grammar<T> {
 
     // struct ParseChart(Vec<Vec<HashMap<Nonterminal,)
 
-    let mut parses: Vec<Vec<HashMap<Nonterminal, (f64, Vec<usize>)>>> = levels
+    let mut parses: Vec<Vec<HashMap<Nonterminal, (f64, SmallVec<[usize; 16]>)>>> = levels
       .iter()
       .map(|level| {
         level
@@ -304,7 +304,7 @@ impl<T: LabeledTree> Grammar<T> {
 
         for (i, node) in level.iter().enumerate() {
           for prod in self.productions.values() {
-            let (branch_indices, branch_probs): (Vec<_>, Vec<_>) = prod
+            let (branch_indices, branch_probs): (SmallVec<[usize; 16]>, SmallVec<[f64; 16]>) = prod
               .branches
               .iter()
               .enumerate()
@@ -370,7 +370,7 @@ impl<T: LabeledTree> Grammar<T> {
     let mut parse_counts = self
       .productions
       .iter()
-      .map(|(k, p)| (*k, [0].repeat(p.branches.len())))
+      .map(|(k, p)| (*k, SmallVec::from_elem(0, p.branches.len())))
       .collect::<HashMap<_, _>>();
     for level_parses in parses.iter() {
       for node_parses in level_parses.iter() {
@@ -612,7 +612,7 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
             }
           }
           h1
-        });      
+        });
 
       if last_counts == parse_counts {
         break;
