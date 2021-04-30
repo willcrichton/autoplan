@@ -1,5 +1,7 @@
 use float_ord::FloatOrd;
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use itertools::Itertools;
+use log::{debug, info};
 use rand::{
   distributions::{Bernoulli, Distribution},
   rngs::StdRng,
@@ -9,6 +11,7 @@ use rand::{
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use serde::Deserialize;
+use smallvec::SmallVec;
 use std::any::Any;
 use std::collections::hash_map::Entry;
 use std::f64::NEG_INFINITY;
@@ -59,9 +62,13 @@ impl<T> Default for SelfRef<T> {
 }
 
 pub trait LabeledTree: Sized + Eq + Clone + fmt::Debug + Sync {
+  type Iter<'a, T>: Iterator<Item = T> + 'a
+  where
+    T: 'a;
+
   fn label_matches(&self, other: &Self) -> bool;
-  fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SelfRef<Self>> + 'a>;
-  fn children_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut SelfRef<Self>> + 'a>;
+  fn children<'a>(&'a self) -> Self::Iter<'a, &'a SelfRef<Self>>;
+  fn children_mut<'a>(&'a mut self) -> Self::Iter<'a, &'a mut SelfRef<Self>>;
 
   fn matches(&self, other: &Self) -> bool {
     self.label_matches(other) && self.children().count() == other.children().count()
@@ -220,6 +227,8 @@ impl<T: fmt::Debug> fmt::Debug for Grammar<T> {
   }
 }
 
+type ProbVec = SmallVec<[f64; 16]>;
+
 impl<T: LabeledTree> Grammar<T> {
   fn new() -> Self {
     Grammar {
@@ -268,85 +277,16 @@ impl<T: LabeledTree> Grammar<T> {
     Nonterminal(n)
   }
 
-  pub fn parse(&self, tree: &T) -> (f64, HashMap<Nonterminal, Vec<usize>>) {
-    self.parse_rule(tree, self.root)
-  }
-
-  fn try_parse_branch(
-    branch: &Branch<T>,
-    node: &T,
-    l: usize,
-    i: usize,
-    parses: &Vec<Vec<HashMap<Nonterminal, Vec<Vec<f64>>>>>,
-    indices: &HashMap<(usize, usize, usize), usize>,
-  ) -> Option<Vec<f64>> {
-    let probs = match &branch.token {
-      Token::Nonterminal(nt) => {
-        let node_parses = &parses[l][i];
-        node_parses.get(nt).map(|probs| {
-          probs
-            .clone()
-            .into_iter()
-            .map(|branch| branch.into_iter())
-            .flatten()
-            .collect::<Vec<_>>()
-        })
-      }
-      Token::Terminal(t) => {
-        if node.matches(t) {
-          let n_children = t.children().count();
-          if n_children == 0 {
-            Some(vec![1_f64.ln()])
-          } else {
-            let children_parses = t
-              .children()
-              .enumerate()
-              .filter_map(|(j, rule)| {
-                let index = (l, i, j);
-                let child_parses = &parses
-                  .get(l + 1)
-                  .expect("Level")
-                  .get(*indices.get(&index).expect("Index"))
-                  .expect("Child");
-                child_parses.get(&rule.nonterminal()).clone()
-              })
-              .collect::<Vec<_>>();
-
-            (children_parses.len() == n_children).then(|| {
-              children_parses
-                .into_iter()
-                .map(|parses| {
-                  parses
-                    .into_iter()
-                    .map(|branch| branch.into_iter())
-                    .flatten()
-                })
-                .multi_cartesian_product()
-                .map(|prob_combination| prob_combination.into_iter().sum())
-                .collect::<Vec<_>>()
-            })
-          }
-        } else {
-          None
-        }
-      }
-    };
-
-    probs.map(|probs| {
-      let branch_prob = branch.log_prob;
-      probs
-        .into_iter()
-        .map(move |prob| prob + branch_prob)
-        .collect()
-    })
-  }
-
-  fn parse_rule(&self, tree: &T, rule: Nonterminal) -> (f64, HashMap<Nonterminal, Vec<usize>>) {
+  pub fn parse(&self, tree: &T) -> Option<(f64, HashMap<Nonterminal, Vec<usize>>)> {
     let (levels, indices) = tree.flatten();
     // println!("levels: {:#?}", levels);
     // println!("indices: {:?}", indices);
 
-    let mut parses = levels
+    info!("parsing {:?}", tree);
+
+    // struct ParseChart(Vec<Vec<HashMap<Nonterminal,)
+
+    let mut parses: Vec<Vec<HashMap<Nonterminal, (f64, Vec<usize>)>>> = levels
       .iter()
       .map(|level| {
         level
@@ -356,61 +296,75 @@ impl<T: LabeledTree> Grammar<T> {
       })
       .collect::<Vec<_>>();
 
-    let update_parse =
-      |node_parses: &mut HashMap<Nonterminal, Vec<Vec<f64>>>, probs: Vec<Vec<f64>>, nt| -> bool {
-        let entry_len = |entry: &Vec<Vec<f64>>| entry.iter().map(|v| v.len()).sum::<usize>();
-        let n_matches = entry_len(&probs);
-        if n_matches > 0 {
-          match node_parses.entry(nt) {
-            Entry::Vacant(vacancy) => {
-              vacancy.insert(probs);
-              true
-            }
-            Entry::Occupied(mut entry) => {
-              if entry_len(entry.get()) < n_matches {
-                entry.insert(probs);
-                true
-              } else {
-                false
-              }
-            }
-          }
-        } else {
-          false
-        }
-      };
-
     for l in (0..levels.len()).rev() {
       let level = &levels[l];
 
-      let mut level_iters = 0;
       loop {
         let mut change = false;
 
         for (i, node) in level.iter().enumerate() {
           for prod in self.productions.values() {
-            let probs = prod
+            let (branch_indices, branch_probs): (Vec<_>, Vec<_>) = prod
               .branches
               .iter()
-              .map(|branch| {
-                Self::try_parse_branch(&branch, node, l, i, &parses, &indices)
-                  .unwrap_or_else(Vec::new)
+              .enumerate()
+              .filter_map(|(k, branch)| {
+                (match &branch.token {
+                  Token::Nonterminal(nt) => parses[l][i].get(nt).map(|(p, _)| *p),
+                  Token::Terminal(t) => {
+                    if node.matches(t) {
+                      let n_children = t.children().count();
+                      (n_children == 0).then(|| 1_f64.ln()).or_else(|| {
+                        let child_probs = t
+                          .children()
+                          .enumerate()
+                          .filter_map(|(j, rule)| {
+                            let child_parses = &parses[l + 1][indices[&(l, i, j)]];
+                            child_parses.get(&rule.nonterminal()).map(|(p, _)| *p)
+                          })
+                          .collect::<Vec<_>>();
+                        (child_probs.len() == n_children).then(|| child_probs.into_iter().sum())
+                      })
+                    } else {
+                      None
+                    }
+                  }
+                })
+                .map(|p| (k, (p + branch.log_prob).exp()))
               })
-              .collect::<Vec<_>>();
+              .unzip();
 
             let node_parses = &mut parses[l][i];
-            if update_parse(node_parses, probs, prod.name) {
-              change = true;
+            if branch_indices.len() > 0 {
+              let prob = branch_probs.into_iter().sum::<f64>().ln();
+              let last_prob = node_parses.insert(prod.name, (prob, branch_indices));
+              change = change
+                || match last_prob {
+                  None => true,
+                  Some((last_prob, _)) => last_prob != prob,
+                };
             }
           }
         }
 
-        level_iters += 1;
-
-        if !change || level_iters >= self.productions.len() {
+        if !change {
           break;
         }
       }
+
+      //   for (i, node) in level.iter().enumerate() {
+      //     let (prob, node_parses) = &mut parses[l][i];
+
+      //     for (nt, branches) in node_parses.iter_mut() {
+      //       for branch_index in branches.iter() {
+      //         let branch = &self.productions[nt].branches[*branch_index];
+      //         branch.token
+      //         branch.log_prob
+      //       }
+      //     }
+
+      //     *prob = todo!();
+      //   }
     }
 
     let mut parse_counts = self
@@ -420,10 +374,10 @@ impl<T: LabeledTree> Grammar<T> {
       .collect::<HashMap<_, _>>();
     for level_parses in parses.iter() {
       for node_parses in level_parses.iter() {
-        for (nt, nt_parses) in node_parses.iter() {
+        for (nt, (_, indices)) in node_parses.iter() {
           let nt_counts = parse_counts.get_mut(nt).unwrap();
-          for (i, branch_parses) in nt_parses.iter().enumerate() {
-            nt_counts[i] += branch_parses.len();
+          for i in indices.iter() {
+            nt_counts[*i] += 1;
           }
         }
       }
@@ -458,19 +412,9 @@ impl<T: LabeledTree> Grammar<T> {
     // );
 
     let root_parse = &parses[0][0];
-    let total_prob = if let Some(parse) = root_parse.get(&self.root) {
-      parse
-        .iter()
-        .map(|branch| branch.iter())
-        .flatten()
-        .map(|p| p.exp())
-        .sum::<f64>()
-        .ln()
-    } else {
-      0_f64.ln()
-    };
-
-    (total_prob, parse_counts)
+    root_parse
+      .get(&self.root)
+      .map(|(total_prob, _)| (*total_prob, parse_counts))
   }
 }
 
@@ -479,7 +423,7 @@ impl<T: LabeledTree> Grammar<T> {
 const ALPHA: f64 = 1.0;
 
 // Parameter for grammar prior
-const LAMBDA: f64 = 1.5;
+const LAMBDA: f64 = 1.2;
 
 impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
   pub fn build_lgcg(exemplars: Vec<T>) -> Self {
@@ -540,7 +484,12 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
   }
 
   pub fn structure_prior(&self) -> f64 {
-    let length = self.grammar.productions.len() as f64;
+    let length = self
+      .grammar
+      .productions
+      .iter()
+      .map(|(k, v)| 1 + v.branches.len())
+      .sum::<usize>() as f64;
     -(length.powf(LAMBDA))
   }
 
@@ -573,7 +522,13 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
     self
       .exemplars
       .par_iter()
-      .map(|exemplar| self.grammar.parse(exemplar).0)
+      .map(|exemplar| {
+        self
+          .grammar
+          .parse(exemplar)
+          .map(|(p, _)| p)
+          .unwrap_or(0_f64.ln())
+      })
       .sum()
   }
 
@@ -644,9 +599,11 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
       let parse_counts = self
         .exemplars
         .par_iter()
-        .map(|exemplar| {
-          let (_, parse_counts) = self.grammar.parse(exemplar);
-          parse_counts
+        .filter_map(|exemplar| {
+          self
+            .grammar
+            .parse(exemplar)
+            .map(|(_, parse_counts)| parse_counts)
         })
         .reduce_with(|mut h1, h2| {
           for (k, vs) in h2.into_iter() {
@@ -655,7 +612,7 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
             }
           }
           h1
-        });
+        });      
 
       if last_counts == parse_counts {
         break;
@@ -679,26 +636,43 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
     }
   }
 
+  pub fn reset_weights(&mut self) {
+    for prod in self.grammar.productions.values_mut() {
+      let n = prod.branches.len() as f64;
+      for branch in prod.branches.iter_mut() {
+        branch.log_prob = (1. / n).ln();
+      }
+    }
+  }
+
   pub fn mcmc(&mut self, iterations: usize) {
-    let mut i = 0;
+    env_logger::try_init();
 
     let mut history = Vec::new();
+    let progress =
+      ProgressBar::new(iterations as u64).with_style(ProgressStyle::default_bar().template(
+        "{pos:>7}/{len:7} {bar:40.cyan/blue}  [elapsed {elapsed_precise}, eta {eta_precise}] {msg}",
+      ));
 
-    loop {
+    for i in (0..iterations).progress_with(progress) {
       //println!("Current grammar: {:#?}", self.grammar);
 
       let last_posterior = self.posterior();
       let last_grammar = self.grammar.clone();
 
       if self.rng.gen::<bool>() {
-        //println!("Split!");
+        debug!("Splitting");
         self.split_random();
       } else {
-        //println!("Merge!");
+        debug!("Merging");
         self.merge_random();
       }
 
+      self.reset_weights();
+
+      debug!("New grammar before update: {:?}", self.grammar);
       self.update_params();
+      debug!("New grammar after update: {:?}", self.grammar);
 
       let new_posterior = self.posterior();
 
@@ -707,26 +681,13 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
       let acceptance = (new_posterior * cooling - last_posterior * cooling)
         .exp()
         .min(1.);
-      println!(
-        "acceptance {:.5?}, new {:.5?}, last {:.5?}",
-        acceptance, new_posterior, last_posterior
-      );
 
       if Bernoulli::new(acceptance).unwrap().sample(&mut self.rng) {
-        println!("Accept");
-        //println!("{:?}", self.grammar);
+        debug!("Accept");
         history.push((last_grammar, last_posterior));
-        // we're good
       } else {
-        println!("Not accept");
-        // rollback
+        debug!("Reject");
         self.grammar = last_grammar;
-      }
-
-      i += 1;
-
-      if i > iterations {
-        break;
       }
     }
 

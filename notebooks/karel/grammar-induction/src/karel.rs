@@ -1,6 +1,6 @@
 use super::grammar::{LabeledTree, Nonterminal, SelfRef};
-use pyo3::prelude::*;
 use serde::Deserialize;
+use smallvec::smallvec;
 use std::any::{Any, TypeId};
 use std::fmt;
 use std::iter;
@@ -82,6 +82,11 @@ impl fmt::Debug for Statement {
 }
 
 impl LabeledTree for Statement {
+  type Iter<'a, T>
+  where
+    T: 'a,
+  = smallvec::IntoIter<[T; 2]>;
+
   fn label_matches(&self, other: &Self) -> bool {
     use Statement::*;
     match (self, other) {
@@ -93,88 +98,89 @@ impl LabeledTree for Statement {
     }
   }
 
-  fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a SelfRef<Self>> + 'a> {
+  fn children<'a>(&'a self) -> Self::Iter<'a, &'a SelfRef<Self>> {
     use Statement::*;
-    match self {
-      Action { .. } => Box::new(iter::empty()),
-      If { then_, else_, .. } => Box::new(iter::once(then_).chain(else_.iter())),
-      While { body, .. } => Box::new(iter::once(body)),
-      Seq { first, second } => Box::new(iter::once(first).chain(iter::once(second))),
-    }
+    let vec = match self {
+      Action { .. } => smallvec![],
+      If { then_, else_, .. } => match else_ {
+        Some(else_) => smallvec![then_, else_],
+        None => smallvec![then_],
+      },
+      While { body, .. } => smallvec![body],
+      Seq { first, second } => smallvec![first, second],
+    };
+    vec.into_iter()
   }
 
-  fn children_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut SelfRef<Self>> + 'a> {
+  fn children_mut<'a>(&'a mut self) -> Self::Iter<'a, &'a mut SelfRef<Self>> {
     use Statement::*;
-    match self {
-      Action { .. } => Box::new(iter::empty()),
-      If { then_, else_, .. } => Box::new(iter::once(then_).chain(else_.iter_mut())),
-      While { body, .. } => Box::new(iter::once(body)),
-      Seq { first, second } => Box::new(iter::once(first).chain(iter::once(second))),
-    }
+    let vec = match self {
+      Action { .. } => smallvec![],
+      If { then_, else_, .. } => match else_ {
+        Some(else_) => smallvec![then_, else_],
+        None => smallvec![then_],
+      },
+      While { body, .. } => smallvec![body],
+      Seq { first, second } => smallvec![first, second],
+    };
+    vec.into_iter()
   }
 }
 
 #[test]
-fn json() {
+fn test() {
   use super::grammar::GrammarLearner;
-  use std::{fs::File, io::BufReader};
 
-  let file = File::open("../progs.json").unwrap();
-  let reader = BufReader::new(file);
-  let progs: Vec<Statement> = serde_json::from_reader(reader).unwrap();
+  let progs = vec![
+    Statement::Seq {
+      first: SelfRef::Concrete(Box::new(Statement::Action {
+        action: Action::Move,
+      })),
+      second: SelfRef::Concrete(Box::new(Statement::If {
+        pred: Predicate::FrontIsClear,
+        then_: SelfRef::Concrete(Box::new(Statement::Action {
+          action: Action::Move,
+        })),
+        else_: None,
+      })),
+    },
+    Statement::If {
+      pred: Predicate::FrontIsClear,
+      then_: SelfRef::Concrete(Box::new(Statement::Action {
+        action: Action::TurnRight,
+      })),
+      else_: None,
+    },
+  ];
+  let mut learner = GrammarLearner::build_lgcg(progs.clone());
 
-  let mut learner = GrammarLearner::build_lgcg(progs[..10].to_vec());
-  learner.mcmc(100);
+  macro_rules! debug {
+    () => {
+      println!("{:#?}", learner.grammar);
+      println!("{:.3?}", learner.grammar.parse(&progs[0]));
+      // println!(
+      //   "learner prior {:.3?}, data likelihood {:.3?}",
+      //   learner.grammar_prior().exp(),
+      //   learner.data_likelihood().exp()
+      // );
+      println!("=========");
+    };
+  };
+
+  debug!();
+  //   learner.mcmc(1000);
+  //   //debug!();
+
+  //   //debug!();
+  //   // println!("{:.3?}", learner.structure_prior());
+  //   // learner.merge_random();
+  //   // learner.update_params();
+  //   // println!("{:.3?}", learner.structure_prior());
+  //   // debug!();
+  //   // learner.merge_random();
+  //   // learner.update_params();
+  //   // debug!();
+  //   // learner.split_random();
+  //   // learner.update_params();
+  //   // debug!();
 }
-
-// #[test]
-// fn test() {
-//   use super::grammar::GrammarLearner;
-
-//   let progs = vec![
-//     Statement::Seq(
-//       SelfRef::Concrete(Box::new(Statement::Action(Action::Move))),
-//       SelfRef::Concrete(Box::new(Statement::If(
-//         Predicate::FrontIsClear,
-//         SelfRef::Concrete(Box::new(Statement::Action(Action::Move))),
-//         None,
-//       ))),
-//     ),
-//     Statement::If(
-//       Predicate::FrontIsClear,
-//       SelfRef::Concrete(Box::new(Statement::Action(Action::TurnRight))),
-//       None,
-//     ),
-//   ];
-//   let mut learner = GrammarLearner::build_lgcg(progs.clone());
-
-//   macro_rules! debug {
-//     () => {
-//       println!("{:#?}", learner.grammar);
-//       println!("{:.3?}", learner.grammar.parse(&progs[0], &mut None).exp());
-//       // println!(
-//       //   "learner prior {:.3?}, data likelihood {:.3?}",
-//       //   learner.grammar_prior().exp(),
-//       //   learner.data_likelihood().exp()
-//       // );
-//       println!("=========");
-//     };
-//   };
-
-//   debug!();
-//   learner.mcmc(1000);
-//   //debug!();
-
-//   //debug!();
-//   // println!("{:.3?}", learner.structure_prior());
-//   // learner.merge_random();
-//   // learner.update_params();
-//   // println!("{:.3?}", learner.structure_prior());
-//   // debug!();
-//   // learner.merge_random();
-//   // learner.update_params();
-//   // debug!();
-//   // learner.split_random();
-//   // learner.update_params();
-//   // debug!();
-// }

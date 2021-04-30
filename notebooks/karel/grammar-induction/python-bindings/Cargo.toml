@@ -1,0 +1,18 @@
+[package]
+name = "python-bindings"
+version = "0.1.0"
+authors = ["Will Crichton <wcrichto@cs.stanford.edu>"]
+edition = "2018"
+
+[lib]
+name = "grammar_induction"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = {version = "0.13", features = ["extension-module"]}
+pythonize = "0.13"
+grammar_induction = { path = ".." }
+
+[patch.crates-io]
+# convenience while waiting for osx fix to land https://github.com/PyO3/pyo3/pull/1539
+pyo3 = {git = "https://github.com/PyO3/pyo3", branch = "main", features = ["extension-module"]}
