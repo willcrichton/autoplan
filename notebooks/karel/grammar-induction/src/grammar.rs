@@ -10,7 +10,7 @@ use rand::{
 };
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 use smallvec::SmallVec;
 use std::any::Any;
 use std::collections::hash_map::Entry;
@@ -18,10 +18,10 @@ use std::f64::NEG_INFINITY;
 use std::fmt;
 use std::mem;
 
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Default, Deserialize)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct Nonterminal(usize);
 
-#[derive(Clone, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum SelfRef<T> {
   Abstract(Nonterminal),
@@ -119,7 +119,7 @@ impl fmt::Debug for Nonterminal {
   }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Serialize, Deserialize)]
 enum Token<T> {
   Nonterminal(Nonterminal),
   Terminal(T),
@@ -163,7 +163,7 @@ impl<T: fmt::Debug> fmt::Debug for Token<T> {
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Branch<T> {
   token: Token<T>,
   log_prob: f64,
@@ -175,7 +175,7 @@ impl<T: fmt::Debug> fmt::Debug for Branch<T> {
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Production<T> {
   name: Nonterminal,
   branches: Vec<Branch<T>>,
@@ -208,7 +208,7 @@ impl<T: fmt::Debug> fmt::Debug for Production<T> {
   }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Grammar<T> {
   productions: HashMap<Nonterminal, Production<T>>,
   nonterminal_counter: usize,
@@ -645,7 +645,7 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
     }
   }
 
-  pub fn mcmc(&mut self, iterations: usize) {
+  pub fn mcmc(&mut self, iterations: usize) -> Vec<(Grammar<T>, f64)> {
     env_logger::try_init();
 
     let mut history = Vec::new();
@@ -700,5 +700,7 @@ impl<T: LabeledTree + fmt::Debug> GrammarLearner<T> {
       history.iter().map(|(_, p)| p).collect::<Vec<_>>()
     );
     println!("best grammar ({:?}) {:#?}", best_posterior, best_grammar);
+
+    history
   }
 }

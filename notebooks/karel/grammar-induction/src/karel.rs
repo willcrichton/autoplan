@@ -1,11 +1,11 @@
 use super::grammar::{LabeledTree, Nonterminal, SelfRef};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use smallvec::smallvec;
 use std::any::{Any, TypeId};
 use std::fmt;
 use std::iter;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Action {
   Move,
@@ -18,7 +18,7 @@ pub enum Action {
   Stop,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Predicate {
   FrontIsClear,
@@ -42,7 +42,7 @@ pub enum Predicate {
   CornerColorIs,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Statement {
   Action {
